@@ -1,0 +1,1587 @@
+---
+title: "\\translate{MID を使用した解約率予測 GLM の改良 - 基本編}{English Here}"
+author:
+  - Reiji Kozuma\thanks{Daido Life Insurance Company, \texttt{rktkdm@gmail.com}}
+  - Ryoichi Asashiba\thanks{Daido Life Insurance Company, \texttt{ryoichi.asashiba@gmail.com}}
+  - Yoshihiro Matsumori\thanks{Sompo Japan Insurance Inc., \texttt{ymatsumori1@sompo-japan.co.jp}}
+  - Hirokazu Iwasawa\thanks{Graduate School of Accountancy, Waseda University, \texttt{iwahiro@bb.mbn.or.jp}}
+format:
+  pdf:
+    pdf-engine: xelatex
+    documentclass: bxjsarticle
+    classoption: xelatex,ja=standard,base=10pt #10pt 自体は欧文では一般的らしい、11pt は収まらず、10.5pt はまだ収まる
+    toc: true
+    toc-title: "目次"
+    toc-depth: 4
+    number-sections: true
+    fig-width: 6
+    fig-height: 4
+    link-citations: true
+    #https://stackoverflow.com/questions/63222203/rmarkdown-wrap-code-in-chunks-but-keep-breaks-after-pipe
+    include-in-header:
+      - text: |
+          %%% 2. フォント・文字設定
+          \setmathfont{Latin Modern Math}
+          \setmathfont{TeX Gyre Pagella Math}[range=bb]
+          %%% 3. レイアウト・段落・見出し設定
+          \makeatletter
+          \setlength{\parindent}{15pt} % 変更（括弧内の数値がゼロのときは字下げなしになるが、1pt以上とすると見た目が変わらず、その原因を理解できていない）
+          \setlength{\parskip}{0pt} % 変更（これがとても大きい）
+          % 見出し（# 〜 #####）の余白・改行を一括調整
+          % 各階層の見出し余白調整（バランスよく余裕を持たせた設定）
+          % 各階層の見出し余白調整（上部の余白をさらに広げたゆったり版）
+          \renewcommand\section{\@startsection{section}{1}{\z@}%
+            {2.5ex \@plus.5ex \@minus.2ex}% <- 上の余白（旧: 1.8ex）約1.5行分
+            {0.8ex \@plus.2ex}%             <- 下の余白（変更なし）
+            {\normalfont\Large\bfseries}}
+          \renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
+            {2.0ex \@plus.3ex \@minus.2ex}% <- 上の余白（旧: 1.5ex）約1行強
+            {0.5ex \@plus.2ex}%             <- 下の余白（変更なし）
+            {\normalfont\large\bfseries}}
+          \renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}%
+            {1.6ex \@plus.3ex \@minus.2ex}% <- 上の余白（旧: 1.2ex）
+            {0.4ex \@plus.1ex}%             <- 下の余白（変更なし）
+            {\normalfont\normalsize\bfseries}}
+          \renewcommand\paragraph{\@startsection{paragraph}{4}{\z@}%
+            {1.4ex \@plus.2ex \@minus.2ex}% <- 上の余白（旧: 1.0ex）
+            {0.3ex \@plus.1ex}%             <- 下の余白（変更なし）
+            {\normalfont\normalsize\bfseries}}
+          \renewcommand\subparagraph{\@startsection{subparagraph}{5}{\z@}%
+            {1.2ex \@plus.2ex \@minus.2ex}% <- 上の余白（旧: 0.8ex）
+            {0.3ex \@plus.1ex}%             <- 下の余白（変更なし）
+            {\normalfont\normalsize\bfseries}}
+          %\usepackage{etoolbox}%上下の余白詰め
+          %\AtBeginEnvironment{Shaded}{%
+          %  \vspace{-0.5\baselineskip}
+          %}
+          %\AtEndEnvironment{Shaded}{%
+          %  \vspace{-0.5\baselineskip}
+          %}
+          \makeatother
+          \usepackage{tocloft} %% 目次の表示設定
+          \renewcommand{\cftdot}{} % 目次のリーダー（点線）を消去
+          %%以下は自動挿入?
+          % \setlength{\emergencystretch}{3em}
+          % \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+          %%% 4. 画像・図表関連
+          \usepackage{wrapfig}
+          \usepackage{pdfpages}
+          \usepackage{placeins}
+          %%% 5. テーブル関連
+          \usepackage{array}
+          %%% 6. コードブロック・シンタックスハイライト
+          \usepackage{fvextra}
+          \usepackage{mdframed}
+          %%コードブロックの表示設定
+          \newcommand{\CodeBlockSizeDefault}{\small}%コードブロックの文字サイズ \scriptsize < \footnotesize <\small
+          \newcommand{\CodeBlockSize}{\CodeBlockSizeDefault}
+          \newcommand{\CodeDefault}{\renewcommand{\CodeBlockSize}{\CodeBlockSizeDefault}}
+          \newcommand{\CodeSmall}{\renewcommand{\CodeBlockSize}{\small}}
+          \newcommand{\CodeFootnote}{\renewcommand{\CodeBlockSize}{\footnotesize}}
+          \newcommand{\CodeScript}{\renewcommand{\CodeBlockSize}{\scriptsize}}
+          \definecolor{codebg}{RGB}{248,248,248}%背景色
+          \renewenvironment{Shaded}%デフォルトの設定を削除
+            {}
+            {}
+          \BeforeBeginEnvironment{Shaded}{% %枠線の追加
+          \begin{mdframed}[
+            backgroundcolor=codebg,
+            linewidth=0.3pt,
+            roundcorner=2pt,
+            skipabove=3pt,
+            skipbelow=3pt]
+          }
+          \AfterEndEnvironment{Shaded}{%
+            \end{mdframed}
+            \par\vspace{8pt}% <- コードブロックの直後に強制的に8pt空ける
+          }
+          \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+            showspaces = false,
+            showtabs = false,
+            breaklines,
+            commandchars=\\\{\},
+            fontsize=\CodeBlockSize,
+            baselinestretch=0.96 %行間詰め
+          }
+          \DefineVerbatimEnvironment{verbatim}{Verbatim}{
+            showspaces = false,
+            showtabs = false,
+            breaklines,
+            commandchars=\\\{\}
+          }
+          %%% 7. 参考文献 (CSL References)
+          %% 参考文献一覧の文字サイズ
+          %\AtBeginEnvironment{CSLReferences}{
+          %  \scriptsize
+          %  \linespread{0.95}\selectfont
+          %}
+          %%% 8. 対訳・言語表示用カスタムマクロ
+          \usepackage{ifthen}
+          \newboolean{showLanguage}
+          \newboolean{showJapanese}
+          \newboolean{showEnglish}
+          \setboolean{showLanguage}{true}
+          \setboolean{showJapanese}{true}   % 日本語表示する場合 true
+          \setboolean{showEnglish}{true}    % 英語表示する場合 true
+          \newif\ifshowLanguageI
+          \newif\ifshowJapaneseI
+          \newif\ifshowEnglishI
+          \ifthenelse{\boolean{showLanguage}}{\showLanguageItrue}{\showLanguageIfalse}
+          \ifthenelse{\boolean{showJapanese}}{\showJapaneseItrue}{\showJapaneseIfalse}
+          \ifthenelse{\boolean{showEnglish}}{\showEnglishItrue}{\showEnglishIfalse}
+          \newcommand{\languageTag}[1]{\textbf{[#1]} }
+          \newcommand{\lnJA}{\languageTag{JA}}
+          \newcommand{\lnEN}{\languageTag{EN}}
+          \DeclareRobustCommand{\translateI}[2]{\ifshowJapaneseI \ifshowLanguageI \lnJA \fi #1 \fi \ifshowEnglishI \ifshowLanguageI \lnEN \fi #2 \fi}
+          %\newcommand{\translate}[2]{#1 (#2)}
+          %\newcommand{\translate}[2]{\ifthenelse{\boolean{showLanguage}}{#1}{} (#2)}
+          \newcommand{\translate}[2]{%
+            \ifthenelse{\boolean{showJapanese}}{\ifthenelse{\boolean{showLanguage}}{\lnJA}{}#1\\}{}%
+            \ifthenelse{\boolean{showEnglish}}{\ifthenelse{\boolean{showLanguage}}{\lnEN}{}#2\\}{}%
+          }
+          \newenvironment{Translate}[2]{%
+            \ifthenelse{\boolean{showJapanese}}{\ifthenelse{\boolean{showLanguage}}{\lnJA}{}#1\par}{}%
+            \ifthenelse{\boolean{showEnglish}}{\ifthenelse{\boolean{showLanguage}}{\lnEN}{}#2\par}{}%
+          }{}
+          \renewcommand{\abstractname}{\translateI{概要}{Abstract}}%
+          %%% 9. メタデータ・タイトル設定
+          % \maketitle の本来の動作を \oldmaketitle に退避
+          \let\oldmaketitle\maketitle
+          % 一時的に \maketitle を何もしない命令に上書き
+          \renewcommand{\maketitle}{}
+    include-before-body:
+      - text: |
+          % 1ページ目：表紙PDFを出力
+          %\includepdf[pages=1]{ICA2026 Paper Coversheet_MID_2611.pdf}
+          % 2ページ目冒頭：本来のタイトルブロック（\oldmaketitle）を出力
+          \oldmaketitle
+    keep-tex: true
+#  html:
+#    toc: true
+#    toc-depth: 4
+#    fig-width: 6
+#    fig-height: 5
+#    df-print: "paged"
+#    embed-resources: true
+execute:
+  cache: true
+csl: apa.csl
+bibliography: papermidrreferences_2614.bib
+# nocite: |
+#   @*
+---
+
+
+
+```{r comment, include=FALSE, eval=FALSE}
+## 2026/9/14
+```
+
+```{r setup_qmd_flg, include=FALSE, cache.rebuild=TRUE}
+SETTING_IS_ROOT_DOCUMENT <- !exists("FLG_IN_RENDERING") || !FLG_IN_RENDERING
+```
+
+```{r setup_qmd, include=FALSE, cache.rebuild=TRUE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+
+# install packages
+pkgs <- c("tidyverse", "gridExtra", "ranger", "tuneRanger", "iml", "devtools", "ROCR", "kableExtra") #midr
+for (pkg in pkgs) {
+  if (!(pkg %in% installed.packages())) {
+    install.packages(pkg)
+  }
+}
+
+# detach packages
+default <- c(".GlobalEnv", "tools:rstudio", "tools:vscode",
+             "package:stats", "package:graphics",
+             "package:grDevices", "package:utils",
+             "package:datasets", "package:methods",
+             "Autoloads", "package:base")
+for (pkg in setdiff(search(), default)) {
+  detach(pkg, character.only = TRUE)
+  }
+
+# clear objects
+remove(list=objects())
+```
+
+
+\pagenumbering{gobble}
+
+```{r setup_include_dependents, include=FALSE, cache.rebuild=TRUE}
+#source("research2025soa_common_0810.R")
+#SETTING_IS_ROOT_DOCUMENT <- FALSE
+#doc_prep <- it.read('research2025soa_prep_2600.qmd')
+#SETTING_IS_ROOT_DOCUMENT <- !exists("FLG_IN_RENDERING") || !FLG_IN_RENDERING
+```
+
+
+```{r setup_setting_fname, include=FALSE, cache.rebuild=TRUE}
+SETTING_FNAME_MODELS_INST_BASIC <- "models_inst_basic.RData" #SETTING_FIT_MODELS_INSTで省略した時の読み込み先
+SETTING_FIT_MODELS_INST <- FALSE#TRUE#
+```
+
+```{r model_load, include=FALSE}
+if(!SETTING_FIT_MODELS_INST){
+  load(SETTING_FNAME_MODELS_INST_BASIC)
+}
+```
+
+
+\begin{abstract}
+\begin{Translate}{
+本ドキュメントは，論文●●において提案した，新たな 解釈手法 MID を活用した EV 解約率前提用 GLM の改善過程における基本的な手順を，直ぐに利用可能なコード例の形で示すものである．データセットの前処理，その研究で利用したモデルの構築，およびパッケージ midr を活用した可視化の方法について述べる．
+
+なお，使用するモデルや評価指標，解釈手法の解説については元となる論文に譲ることとし，本ドキュメントではコードを示すことによる具体的な使用方法の説明に注力する．また，EVの簡易計算や，論文のデータの再現のためのドキュメントは，別ファイルで提供する．
+
+コードの多くは元の研究の内容を再現するためのものであり，それらの中には，初学者にとっては理解が難しいコードも存在する．そのため，初学者は，Section~\ref{sec-CaseStudy_ImprovedGLM_Refinements} 以外の内容については単に記載されているコードを深く考えずにそのまま実行するだけでもさしあたりは問題ない．
+ }{%
+English Here
+ }\end{Translate}
+\end{abstract}
+
+
+
+# 準備
+
+## パッケージの読み込み
+
+`\begin{Translate}{`{=latex}
+本ドキュメントで使用するパッケージを読み込む．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+```{r load_packages_paper, cache.rebuild=TRUE}
+library(midr)
+library(tidyverse)
+library(ROCR)
+```
+
+
+## データの読み込み
+
+`\begin{Translate}{`{=latex}
+最初に，本研究で利用したデータセット @SOA2014Study を読み込む[^dataset_URL]．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+[^dataset_URL]: [https://github.com/kevinykuo/insurance/tree/master/data](https://github.com/kevinykuo/insurance/tree/master/data) `\translateI{からダウンロード可能．}{Available for download.}`{=latex}
+
+```{r load_data}
+# install.packages("devtools")
+# devtools::install_github("kasaai/insurance")
+library(insurance)
+library(tidyverse)
+df_raw <- lapse_study
+```
+
+
+`\begin{Translate}{`{=latex}
+次に，データを利用しやすいように前処理を行う．便宜上追加した ID 列を除けば，元論文で説明したとおりである．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+
+```{r data_prep, warning=FALSE}
+# ID 列の追加
+df_raw <- df_raw %>% mutate(ID = as.integer(rownames(df_raw)))
+
+# lapse_study_year (Convert from string "yyyy-(yyyy+1)" to integer yyyy),
+# issue_year, duration
+df_raw <- df_raw %>% mutate(
+    lapse_study_year = as.integer(substr(lapse_study_year, 1, 4)),
+    issue_year = 
+      if_else(issue_year == "Pre-1991", "-1990", issue_year) %>%
+      as.ordered(),
+    duration = case_when(
+      duration == "6-9" ~ "06-09",
+      duration == "13+" ~ "13-",
+      TRUE ~ duration
+      ) %>% as.ordered()
+    )
+
+# post_level_premium_structure
+df_raw <- df_raw %>% mutate(
+  post_level_premium_structure = 
+    if_else(
+      post_level_premium_structure == "1. Premium Jump to ART",
+      "ART", "Other"
+    ) %>% factor(levels = c("ART", "Other")))
+
+# premium_jump_ratio
+df_raw <- df_raw %>% mutate(
+  premium_jump_ratio =
+    case_when(
+      premium_jump_ratio == "Y. Unknown" ~ "Unknown",
+      premium_jump_ratio == "X. 24.01 AND UP" ~ "24.01-",
+      .default = as.integer(substr(premium_jump_ratio, 4, 5)) %>%
+        (function(x) sprintf("%#2d.01-%#2d.00", x, x+1))) %>%
+    as.factor())
+
+# Others
+levels_risk_class <-
+  c("Super-Pref NS","Pref Best NS", "Pref Resid NS", "Non-Pref NS", "Undiff NS",
+    "Pref SM", "Non-Pref SM", "Undiff SM", "Agg/Unknown")
+levels_premium_mode <-
+  c("Annual", "Semiannual", "Quarterly", "Monthly", "Biweekly", "Unknown/Other")
+
+df_raw <- df_raw %>% mutate(
+  premium_mode = premium_mode %>% substring(4) %>%
+    factor(levels = levels_premium_mode),
+  risk_class = risk_class %>%
+    factor(levels = levels_risk_class),
+  gender = gender %>%
+    factor(levels = c("M","F"),
+           labels = c("male", "female")),
+  issue_age = as.ordered(issue_age),
+  face_amount = face_amount %>%
+    factor(levels = c("A.  < 100k","B.  100k-249k", "C.  250k-999k", "D.  1M +"),
+           labels = c("-100K", "100K-250K", "250K-1M", "1M-"), 
+           ordered = TRUE))
+
+# Drop unused data.
+df_raw <- df_raw %>% select(
+    ID, lapse_study_year, policy_year, 
+    duration,
+    issue_year, issue_age, gender, face_amount, risk_class,
+    premium_mode, premium_jump_ratio, post_level_premium_structure,
+    exposure_count, lapse_count,
+    exposure_amount, lapse_amount 
+  )
+df_all <- df_raw %>% filter(exposure_count != 0)
+df_all <- df_all %>% select(-lapse_amount) %>%
+  rename(exposure = exposure_count) %>%
+  rename(lapse = lapse_count)
+
+# 目的変数として，各グループの解約率を計算
+df_all <- df_all %>% mutate(lapse_rate = lapse / exposure)
+
+prep_toint_pjratio <- function(df_raw){
+  df_raw %>%
+    mutate(premium_jump_ratio_unknown =
+             if_else(premium_jump_ratio == "Unknown", 1, 0)) %>%
+    mutate(premium_jump_ratio =
+             fct_recode(premium_jump_ratio,
+                        "05" = "Unknown", "27" = "24.01-") %>%
+             substr(1, 2) %>% as.integer())
+}
+```
+
+`\begin{Translate}{`{=latex}
+後で説明するように，MID による関数分解を行うモデルは 2004-2006保険年度で学習したもの（Validation Year は 2007）とするので，このデータを抽出して準備する．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+
+```{r year_midr}
+year_midr <- 2006 # Validation Year - 1
+df_train_2006 <- df_all %>%
+  filter(lapse_study_year >= year_midr-2, lapse_study_year <= year_midr)
+df_test_2006 <- df_all %>%
+  filter(lapse_study_year == year_midr+1)
+```
+
+## 評価関数の準備
+
+`\begin{Translate}{`{=latex}
+Log-loss を重み付きで計算する関数の実装を行う．の引数 `mean` を `FALSE` とした場合は Log-loss の総和が， `TRUE` とした場合は加重平均値が出力される．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+
+```{r}
+xlogy <- function(x, y){
+  if_else(x == 0, 0, x * log(y))
+}
+calc_logloss <- function(y_pred, y_act, w = NULL, mean = T){
+  losses <- - xlogy(y_act, y_pred) - xlogy(1 - y_act, 1 - y_pred)
+  if(is.null(w)){
+    if(mean){
+      return(mean(losses)) 
+    }else{
+      return(sum(losses)) 
+    }
+  }
+  if(mean){
+    return(sum(w * losses) / sum(w)) 
+  }else{
+    return(sum(w * losses)) 
+  }
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+続いて，ROC-AUC を重み付きで計算する関数の実装を行う．
+参考: [ROCR/R/prediction.R at master · ipa-tys/ROCR](https://github.com/ipa-tys/ROCR/blob/master/R/prediction.R)
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+
+```{r meas_auc}
+calc_auc <- function(y_pred, y_act, w = NULL, verbose = FALSE){
+  predictions <- y_pred
+  pred.order <- order(predictions, decreasing=TRUE)
+  predictions.sorted <- predictions[pred.order]
+  tp <- cumsum(y_act[pred.order] * w[pred.order])
+  fp <- cumsum((1-y_act[pred.order]) * w[pred.order])
+  dups <- rev(duplicated(rev(predictions.sorted)))
+  
+  tp <- c(0, tp[!dups])
+  fp <- c(0, fp[!dups])
+  cutoffs <- c(Inf, predictions.sorted[!dups])
+  
+  n.pos <- sum(y_act* w)
+  n.neg <- sum((1-y_act) * w)
+  fn <- n.pos - tp
+  tn <- n.neg - fp
+  n.pos.pred <- 
+  n.neg.pred <- 
+  
+  pred <- new("prediction", predictions=list(predictions),
+                labels=list(c("0", "1")),
+                cutoffs=list( cutoffs ),
+                fp=list( fp ),
+                tp=list( tp ),
+                fn=list( fn ),
+                tn=list( tn ),
+                n.pos=list( n.pos),
+                n.neg=list( n.neg),
+                n.pos.pred=list(tp + fp),
+                n.neg.pred=list(tn + fn))
+  auc <- performance(pred, "auc")
+  if (verbose){
+    perf <- performance(pred, "tpr", "fpr")
+    list(auc = auc, curve = perf)
+  }else{
+    as.numeric(auc@y.values)
+  }
+}
+```
+
+
+# モデルの構築
+
+## Reduced Baseline GLM {#sec-CaseStudy_SOA}
+
+`\begin{Translate}{`{=latex}
+本研究では複数のモデルを取り扱う．モデルの前処理もモデルによって異なることから，前処理部分をモデル固有の関数として実装することで，コードの見通しをよくする．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+まず，`issue_age` に対しては，SOA のレポート P. 39 に記載された代表年齢に変換する関数を作成する．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+
+```{r prepfun_soa_xy_age}
+prep_toint_age <- function(df_raw){
+  df_raw %>%
+    mutate(issue_age = case_match(issue_age,
+        "0-19" ~ 9.5,
+        "20-29" ~ 26.3,
+        "30-39" ~ 34.7,
+        "40-49" ~ 44.2,
+        "50-59" ~ 53.7,
+        "60-69" ~ 63.3,
+        "70+" ~ 72.3
+      ))
+}
+```
+
+`\begin{Translate}{`{=latex}
+次に，SOA の作成した GLM と同様の前処理を行う関数を作成する．ただし，ここで構築するのは `face_amount` を取り除いた the reduced Baseline GLM である．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+
+```{r prepfun_soa_xy}
+prepfun_soa_xy <- function(df_tmp){
+  df_tmp %>% prep_toint_age %>% prep_toint_pjratio %>%
+    mutate(
+      issue_age_sq = issue_age^2, issue_age_log = log(issue_age),
+      risk_class_group = risk_class %>%
+        factor(levels = levels_risk_class,
+               labels = c("Super-Pref NS","NS","NS","NS","NS","SM","SM","SM","SM")),
+      premium_mode_group = premium_mode %>%
+        factor(levels = levels_premium_mode,
+               labels = c("Annual","Semiannual/Quarterly","Semiannual/Quarterly",
+                          "Monthly/Biweekly","Monthly/Biweekly","Unknown/Other")),
+      premium_jump_ratio_group = cut(
+        if_else(premium_jump_ratio_unknown == 1, 0, premium_jump_ratio),
+        breaks = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 99), right = FALSE)) %>%
+    select(duration, post_level_premium_structure,
+           issue_age, issue_age_sq, issue_age_log, risk_class_group,
+           premium_mode_group, premium_jump_ratio_group, exposure, lapse)
+}
+```
+
+`\begin{Translate}{`{=latex}
+以上の前処理を実際に適用したデータフレームを作成しておく．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+
+
+```{r df_2006_soa}
+df_train_2006_soa <- df_train_2006 %>% prepfun_soa_xy
+df_test_2006_soa <- df_test_2006 %>% prepfun_soa_xy
+```
+
+`\begin{Translate}{`{=latex}
+最後に，学習データに対して `glm()` 関数を適用し，モデルを構築する． `duration : post_level_premium_structure` の記述は，これらについて層化したモデルとしていることを表す．
+`}{`{=latex}
+Excluding preprocessing, the R code for model construction is shown below. The syntax `duration : post_level_premium_structure` represents stratification across these factors.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+`duration : post_level_premium_structure` の指定は計画行列が巨大になることから，層ごとに別々のGLMを構築するよりも計算時間がかかる．この観点で元論文で掲載した精度評価には，層ごとに別々のGLMを構築したものを使用している．両者は本質的に同等なモデルであるが，1件も解約が発生しないケースの予測においてわずかに出力される確率値が異なっている．従って，本ドキュメントによる実装は元論文の結果を厳密には再現しない
+`}{`{=latex}
+<Need to modify Translation>
+Specifying `duration : post_level_premium_structure` creates a large design matrix. In practice, fitting separate GLMs for each stratum is computationally faster. For the evaluation results in xxx and xxx, separately fitted GLMs are used. While mathematically equivalent, slight numerical variations in predicted probabilities occur in strata with zero observed lapses.
+`}\end{Translate}`{=latex}
+
+
+```{r model_soa_2006_code, eval=FALSE}
+model_soa_2006 <- glm(
+  cbind(lapse, exposure - lapse) ~
+    (. + premium_jump_ratio_group * issue_age  - 1) : duration : post_level_premium_structure,
+  family = quasibinomial(), 
+  data = df_train_2006_soa)
+```
+
+```{r model_soa_2006, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+model_soa_2006 <- glm(
+  cbind(lapse, exposure - lapse) ~
+    (. + premium_jump_ratio_group * issue_age  - 1) : duration : post_level_premium_structure,
+  family = quasibinomial(), 
+  data = df_train_2006_soa)
+}
+```
+
+`\begin{Translate}{`{=latex}
+学習データで現れなかったグループがテストデータには現れることがあるという点に注意が必要である．そのようなデータに対しても予測できるよう，テストデータにも前処理が必要となる．今回使用する年度のデータに対しては，次のような前処理が必要となるので，それを関数として作成する．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+```{r prepfun_soa_xy_test_2006}
+prepfun_soa_xy_test_2006 <- function(df_tmp){
+  df_tmp %>% mutate(
+    premium_jump_ratio_group = if_else(
+      post_level_premium_structure == "ART" & duration == "10" & 
+        premium_jump_ratio_group == "[20,99)", "[16,20)",
+      premium_jump_ratio_group)
+  ) %>% mutate(
+    premium_jump_ratio_group = if_else(
+      post_level_premium_structure == "ART" & duration == "12" & 
+        premium_jump_ratio_group == "[16,20)", "[12,16)",
+      premium_jump_ratio_group)
+  ) %>% mutate(
+    premium_jump_ratio_group = if_else(
+      post_level_premium_structure == "ART" & duration == "13-" & 
+        premium_jump_ratio_group == "[12,16)", "[10,12)",
+      premium_jump_ratio_group)
+  ) %>% mutate(
+    risk_class_group = if_else(
+      post_level_premium_structure == "Other" & duration == "11" & 
+        risk_class_group == "Super-Pref NS", "NS",
+      risk_class_group)
+  )
+}
+```
+
+
+## XGBoost Model
+
+`\begin{Translate}{`{=latex}
+次に，GLM の改良に利用するブラックボックスモデルとして XGBoost による予測モデルを構築する．
+`}{`{=latex}
+Next, we train an XGBoost predictive model as the high-performing black-box benchmark for refining the GLM.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+`xgb.cv()` 関数などのパラメータ `params` に与えるパラメータについては次のとおりである．パラメータ `objective`に `"reg:logistic"` を指定し，ロジスティック損失関数を objective として確率を出力させる．また，過学習防止のために木の複雑さを設定する必要がある．その交差検証での判定基準として，パラメータ `eval_metric` を `"logloss"` に指定する．加えて，ハイパーパラメータを設定する．本研究では， tune パッケージ を利用して事前にチューニングした[^XGBHyperparameters]．
+`}{`{=latex}
+The parameter settings passed to `xgb.cv()` and related functions are configured as follows. Setting `objective = "reg:logistic"` specifies a logistic objective with probability output. To control overfitting, `eval_metric = "logloss"` is used for cross-validation stopping criteria. Hyperparameters (such as maximum depth and learning rate) are tuned in advance using the `tune` package[^XGBHyperparameters]. 
+`}\end{Translate}`{=latex}
+
+
+[^XGBHyperparameters]: `\translateI{`{=latex}learning rate は0.02に固定した．その他のハイパーパラメータは，2005年から2007年の学習データを用いた4分割交差検証によって一度だけ調整され，ローリングウィンドウ全体を通じて固定した．一方，ブースティングの反復回数は，各ウィンドウについて，そのウィンドウに対応する学習データ内での4分割交差検証により個別に決定した．`}{`{=latex}The learning rate was fixed at 0.02. The other hyperparameters were tuned once using four-fold cross-validation on the 2005–2007 training data and then held fixed across rolling windows, while the number of boosting rounds was selected separately for each window by four-fold cross-validation within the corresponding training data.`}`{=latex}
+
+
+
+```{r xgb_get_mm}
+library(xgboost)
+get_mm <- function(df){
+  df <- df %>%
+    select(setdiff(names(df),c(
+      "ID", "lapse_study_year", "policy_year", "issue_year",
+      "exposure_amount", "lapse", "exposure", "lapse_rate"))) %>%
+    prep_toint_pjratio
+  model.matrix(~ ., df)
+}
+df_train_2006_mm <- df_train_2006 %>% get_mm
+constant_cols_2006 <- which(apply(df_train_2006_mm, 2, function(col) all(col == col[1])))
+dm_train_2006 <- xgb.DMatrix(
+  data = df_train_2006_mm[, -constant_cols_2006, drop = FALSE],
+  label = df_train_2006 %>% pull(lapse_rate),
+  weight = df_train_2006 %>% pull(exposure))
+```
+
+
+```{r xgb_params_xgb}
+params_xgb <- list(
+  objective = "reg:logistic",
+  eval_metric = "logloss", #Used in CV
+  # Hyper parameters. Determined by Bayesian optimization using the "tune" package.
+  gamma = 2.966439e-08, #loss_reduction
+  eta = 0.02, #learn_rate
+  max_depth = 10, #tree_depth
+  min_child_weight = 10, #min_n
+  subsample = 0.9976594, #sample_size
+  colsample_bynode = 6/31 #mtry / count of predictors
+)
+```
+
+
+`\begin{Translate}{`{=latex}
+以上の準備のもと，`xgb.cv()`関数により交差検証で木の複雑さ`nrounds`を決定し，`xgb.train()`関数で予測モデルの構築を行う．
+`}{`{=latex}
+With these preparations, the optimal number of boosting rounds (`nrounds`) is determined via cross-validation using `xgb.cv()`, and the final prediction model is trained using `xgb.train()`.
+`}\end{Translate}`{=latex}
+
+
+```{r xgb_model_xgboost_2006_code, eval=FALSE}
+set.seed(2025)
+# Determine the optimal number of boosting rounds by CV
+cv_xgboost_2006 <- xgb.cv(data = dm_train_2006, nrounds = 2000, nfold = 4,
+                          early_stopping_rounds = 10, params = params_xgb, verbose = 0)
+nrounds <- cv_xgboost_2006$early_stop$best_iteration
+
+# Fit model
+set.seed(2025)
+model_xgboost_2006 <- xgb.train(data = dm_train_2006, nrounds = nrounds,  
+                                params = params_xgb)
+```
+
+
+```{r xgb_model_xgboost_2006, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+set.seed(2025)
+# Determine the optimal number of boosting rounds by CV
+cv_xgboost_2006 <- xgb.cv(data = dm_train_2006, nrounds = 2000, nfold = 4,
+                          early_stopping_rounds = 10, params = params_xgb, verbose = 0)
+nrounds <- cv_xgboost_2006$early_stop$best_iteration
+
+# Fit model
+set.seed(2025)
+model_xgboost_2006 <- xgb.train(data = dm_train_2006, nrounds = nrounds,  
+                                params = params_xgb)
+}
+```
+
+`\begin{Translate}{`{=latex}
+この XGBoost が GLM よりも精度の高いモデルであることは別途検証が必要であるが，ここでは記載を省略する．
+`}{`{=latex}
+
+`}\end{Translate}`{=latex}
+
+## Improved GLM {#sec-CaseStudy_ImprovedGLM}
+
+`\begin{Translate}{`{=latex}
+ここまでで構築した XGBoost の予測結果を MID を用いて観察し，観察結果を参考にして GLM を改良する．以下では， @sec-CaseStudy_SOA で構築した，意図的に`face_amount`を除外したモデル（ **reduced baseline GLM**）を改良の出発点とする．`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+つづく節では，改良の手順の一部をコード例を示しながら説明する．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+
+### Functional Decomposition and Feature Importance
+
+`\begin{Translate}{`{=latex}
+関数分解を行うモデルの対象となるデータを用意する．ここで，本研究では検証年度に応じて複数のモデルを構築しているが，MID を観察するモデルは2004-2006保険年度で学習したモデルとし，関数分解に用いるインスタンスも，その学習データとする．これは，SOAのGLMとXGBoostの間の予測の差が一定程度大きく，かつ解約の予測が外れやすい時期にはまだ差し掛かっていないことによる[^ForPerformanceDetail]．
+`}{`{=latex}
+We prepare the dataset for performing functional decomposition. While multiple models are trained across different time windows in this study, MID inspection is conducted on the model trained on the 2004–2006 policy years. This window is selected because the prediction gap between GLM and XGBoost is sufficiently pronounced without yet being confounded by extreme market shifts [^ForPerformanceDetail].
+`}\end{Translate}`{=latex}
+
+[^ForPerformanceDetail]: `\translateI{`{=latex}元論文に記載する EV 変動要因分析による前提実績差異を確認すると， 2008 保険年度以降は XGBoost でも差異が大きくなっており，将来に向かっての解約の予測が困難であることを示唆している．`}{`{=latex}<Need to modify translation> As shown in xxx, 
+experience variances increase substantially in magnitude across all models from the 2008 policy year onward, reflecting heightened forecasting difficulty during the financial crisis.`}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+重みを指定するためのデータや，予測に使用する XGBoost モデル固有の関数(`pred.fun`)を用意する必要があるので，それをここで定義する．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+```{r mod_df_prep}
+df_train_2006_xw <- df_train_2006 %>%
+  select(-ID, -lapse_study_year, -policy_year, -issue_year, -exposure_amount, -lapse, -lapse_rate)
+df_train_2006_w <- df_train_2006_xw %>% pull(exposure)
+predfun_xgb <- function(model, newdata){
+  df_mm <- newdata %>% get_mm
+  df_mm <- df_mm[, -constant_cols_2006, drop = FALSE]
+  predict(model, df_mm)
+}
+```
+
+
+
+`\begin{Translate}{`{=latex}
+まず最初のステップとして，XGBoost の予測値を関数分解するため， `midr::interpret()`関数を実行する[^midrinst]．MID of order 2 までの分解が実行可能だが，今回のケースでは分解のときに，すべての交互作用項を用意すると singular fit の回避が困難であるため，一部の交互作用項を省略した形の分解を行う．
+`}{`{=latex}
+As the first step, we execute `midr::interpret()` to perform functional decomposition on XGBoost predictions [^midrinst]. While MID of order 2 computes up to two-way interactions, we omit a subset of interactions to prevent singular matrix fits in the decomposition step.
+`}\end{Translate}`{=latex}
+
+[^midrinst]: `\translateI{`{=latex}midr パッケージの使用方法の詳細は [https://cran.r-project.org/web/packages/midr/readme/README.html](https://cran.r-project.org/web/packages/midr/readme/README.html) を参照．`}{`{=latex}For implementation details of the midr package, see [https://cran.r-project.org/web/packages/midr/readme/README.html](https://cran.r-project.org/web/packages/midr/readme/README.html).`}`{=latex}
+
+```{r mod_interpret_code, eval=FALSE}
+mid_xgb <- midr::interpret(
+  formula(
+    ~ (. -exposure)*
+      (duration+post_level_premium_structure+
+         face_amount+premium_jump_ratio+issue_age)), 
+  data = df_train_2006_xw, weights = df_train_2006_w,
+  model = model_xgboost_2006, pred.fun = predfun_xgb, link = "logit", 
+  # Penalty factor for pseudo-smoothing; helps avoid singular fits.
+  lambda = 0.01,
+  verbosity = 0 # Stop when a singular fit is encountered.
+)
+```
+
+
+```{r mod_interpret, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+mid_xgb <- midr::interpret(
+  formula(
+    ~ (. -exposure)*
+      (duration+post_level_premium_structure+
+         face_amount+premium_jump_ratio+issue_age)), 
+  data = df_train_2006_xw, weights = df_train_2006_w,
+  model = model_xgboost_2006, pred.fun = predfun_xgb, link = "logit", 
+  # Penalty factor for pseudo-smoothing; helps avoid singular fits.
+  lambda = 0.01,
+  verbosity = 0 # Stop when a singular fit is encountered.
+)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+可視化のステップに入る前に，見た目を整えるために，幾つかの準備を行う．これは分析上必須ではない．
+`}{`{=latex}
+
+`}\end{Translate}`{=latex}
+
+```{r mid_theme}
+# Display border lines.
+theme_bw16 <- theme_bw(base_size = 16)
+# Display the text on the X-axis vertically.
+theme_axisxvert <- theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+theme_set(theme_bw16 + theme_axisxvert)
+# Set default color theme (ggmid's argment "theme").
+options(midr.sequential = "Oslo")
+# Modify appearance of scatter plots.
+update_geom_defaults("point",list(alpha = 0.5, size = 2.0, shape = 16))
+# Utility function to add labels
+add_label <- function(data){
+  geom_label(
+    data = data, aes(x = x, y = y, label = label),
+    size = 5, fill = "white", colour = "black",
+    label.size = 0.1, label.padding = unit(0.1, "lines"), fontface = "bold"
+  )
+}
+```
+
+`\begin{Translate}{`{=latex}
+次に特徴量とそれらの間の交互作用の重要度を可視化する．結果は @fig-mod_importance のとおり．
+`}{`{=latex}
+Next, we visualize the importance of feature main effects and two-way interactions. The feature effect importance heatmap is shown in @fig-mod_importance.
+`}\end{Translate}`{=latex}
+<!--`midr::mid.importance()`関数を実行して重要度を計算してから，`midr::ggmid()`関数で可視化を行う．-->
+
+```{r fig-mod_importance, fig.width = 8, fig.height = 6, out.width="65%"}
+#| fig-cap: 
+#|   - "Feature Effect Importance"
+mid_xgb %>% midr::mid.importance(
+  data = df_train_2006_xw, weights = df_train_2006_w) %>%
+  midr::ggmid(type = "heatmap")
+```
+
+`\begin{Translate}{`{=latex}
+関数分解を行う対象をベースラインの GLM と XGBoost の予測値の差に変更することで，両者の予測の差異がどの説明変数に関係して現れるのかを可視化することもできる．結果は @fig-mod_importance_diff のとおり．
+`}{`{=latex}
+By changing the decomposition target to the prediction difference between the reduced baseline GLM and XGBoost, we can directly visualize which features drive the discrepancies between the two models. The resulting importance plot for the difference model is shown in @fig-mod_importance_diff.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+いずれも，分解の対象となる予測値が確率の値そのものではなく線形予測子のもの（logit 変換を介した後の数値）であることに注意する．
+`}{`{=latex}
+Note that the decomposition is applied to the linear predictor scale (logit-transformed values) rather than raw probability predictions.
+`}\end{Translate}`{=latex}
+
+
+```{r mod_importance_diff_code, eval=FALSE}
+fn_logit <- function(p){log(p/(1-p))} # link function
+fn_expit <- function(x){1/(1+exp(-x))} # inverse of the link function
+
+# pred.fun for the SOA GLM model
+predfun_soa_2006 <- function(model, newdata){
+  predict(model,
+          newdata %>% mutate(lapse = 0) %>% #prevent error in prepfun_soa_xy
+          prepfun_soa_xy %>% prepfun_soa_xy_test_2006,
+          type = c("response"))
+}
+# pred.fun for "difference" models
+predfun_diff <- function(model, newdata){
+  p_target <- model$predfun_glm(model$model_glm, newdata)
+  p_base <- model$predfun_xgb(model$model_xgb, newdata)
+  fn_expit(fn_logit(p_target) - fn_logit(p_base)) #apply the link function
+}
+
+# Create the "difference" model
+model_diff <- list()
+model_diff$model_xgb <- model_xgboost_2006
+model_diff$model_glm <- model_soa_2006
+model_diff$predfun_xgb <- predfun_xgb
+model_diff$predfun_glm <- predfun_soa_2006
+
+# Execute midr::interpret for the "difference" model
+mid_diff <- midr::interpret(
+  formula(
+    ~ (. -exposure)*
+      (duration+post_level_premium_structure+face_amount+premium_jump_ratio+issue_age)), 
+  data = df_train_2006_xw, weights = df_train_2006_w,
+  model = model_diff, pred.fun = predfun_diff,
+  link = "logit", lambda = 0.01,
+  verbosity = 0
+)
+
+# Label settings
+add_label_tmp <- add_label(data.frame(
+    x = c("post_level_premium_structure",
+          "risk_class", "premium_mode", "premium_mode", "premium_mode",
+          "issue_age", "risk_class", "premium_jump_ratio", "issue_age", "premium_jump_ratio", "gender"),
+    y = c("post_level_premium_structure",
+          "risk_class", "premium_mode", "premium_jump_ratio", "post_level_premium_structure",
+          "issue_age", "issue_age", "risk_class", "face_amount", "face_amount", "gender"),
+    label = c("X", "A-2", "A-3", "A-3", "A-4", "A-5", "A-6", "A-7", "A-8", "A-9", "A-10")
+  ))
+```
+
+
+```{r mod_importance_diff, echo=FALSE}
+fn_logit <- function(p){log(p/(1-p))} #link function
+fn_expit <- function(x){1/(1+exp(-x))} #inverse of the link function
+#pred.fun for the SOA GLM model
+predfun_soa_2006 <- function(model, newdata){
+  predict(model,
+          newdata %>% mutate(lapse = 0) %>% #prevent error in prepfun_soa_xy
+          prepfun_soa_xy %>% prepfun_soa_xy_test_2006,
+          type = c("response"))
+}
+#pred.fun for "difference" models
+predfun_diff <- function(model, newdata){
+  p_target <- model$predfun_glm(model$model_glm, newdata)
+  p_base <- model$predfun_xgb(model$model_xgb, newdata)
+  fn_expit(fn_logit(p_target) - fn_logit(p_base)) #apply the link function
+}
+
+# Create the "difference" model
+model_diff <- list()
+model_diff$model_xgb <- model_xgboost_2006
+model_diff$model_glm <- model_soa_2006
+model_diff$predfun_xgb <- predfun_xgb
+model_diff$predfun_glm <- predfun_soa_2006
+
+# execute midr::interpret for the "difference" model
+if(SETTING_FIT_MODELS_INST){
+mid_diff <- midr::interpret(
+  formula(
+    ~ (. -exposure)*
+      (duration+post_level_premium_structure+face_amount+premium_jump_ratio+issue_age)), 
+  data = df_train_2006_xw, weights = df_train_2006_w,
+  model = model_diff, pred.fun = predfun_diff,
+  link = "logit", lambda = 0.01,
+  verbosity = 0
+)
+}
+#label settings
+add_label_tmp <- add_label(data.frame(
+    x = c("post_level_premium_structure",
+          "risk_class", "premium_mode", "premium_mode", "premium_mode",
+          "issue_age", "risk_class", "premium_jump_ratio", "issue_age", "premium_jump_ratio", "gender"),
+    y = c("post_level_premium_structure",
+          "risk_class", "premium_mode", "premium_jump_ratio", "post_level_premium_structure",
+          "issue_age", "issue_age", "risk_class", "face_amount", "face_amount", "gender"),
+    label = c("X", "A-2", "A-3", "A-3", "A-4", "A-5", "A-6", "A-7", "A-8", "A-9", "A-10")
+  ))
+```
+
+
+```{r fig-mod_importance_diff, fig.width = 8, fig.height = 6, out.width="65%"}
+#| fig-cap: 
+#|   - "Feature Effect Importance of the difference model"
+#display feature effect imporatance plot
+mid_diff %>% midr::mid.importance(
+  data = df_train_2006_xw, weights = df_train_2006_w) %>%
+  midr::ggmid(type = "heatmap") + add_label_tmp
+```
+
+
+`\begin{Translate}{`{=latex}
+今回の GLM は層化されているため，ある層に特化した分析を行うことも考えられる．たとえば，レポートで GLM の構築対象とした `duration == 10, post_level_premium_structure == "ART"` にデータを限定して関数分解を行うと @fig-mod_importance_filtered のとおり．
+`}{`{=latex}
+Because the GLM is stratified, focused analysis on specific strata can also be conducted. For example, restricting the decomposition to the `duration == 10` and `post_level_premium_structure == "ART"` stratum yields @fig-mod_importance_filtered.
+`}\end{Translate}`{=latex}
+
+```{r fig-mod_importance_filtered_code, fig.width = 6, fig.height = 5, eval=FALSE}
+
+# Create filtered data.
+df_train_2006_xw_d10ART <- df_train_2006_xw %>%
+  filter(duration == 10, post_level_premium_structure == "ART")
+df_train_2006_w_d10ART <- df_train_2006_xw_d10ART %>% pull(exposure)
+
+# midr::interpret.
+mid_xgb_d10ART <- midr::interpret(
+      formula(
+        ~ (. -exposure - duration - post_level_premium_structure)*
+          (face_amount+premium_jump_ratio+issue_age)), 
+      data = df_train_2006_xw_d10ART, weights = df_train_2006_w_d10ART,
+      model = model_xgboost_2006, pred.fun = predfun_xgb,
+      link = "logit", lambda = 0.01, verbosity = 0
+    )
+mid_diff_d10ART <- midr::interpret(
+      formula(
+        ~ (. -exposure - duration - post_level_premium_structure)*
+          (face_amount+premium_jump_ratio+issue_age)), 
+      data = df_train_2006_xw_d10ART, weights = df_train_2006_w_d10ART,
+      model = model_diff, pred.fun = predfun_diff,
+      link = "logit", lambda = 0.01, verbosity = 0
+    )
+
+# Display feature effect importance plot.
+mid_xgb_d10ART %>% midr::mid.importance(
+  data = df_train_2006_xw_d10ART, weights = df_train_2006_w_d10ART) %>%
+  midr::ggmid(type = "heatmap") +
+  ggtitle("XGBoost")
+
+# Label settings
+add_label_tmp <- add_label(data.frame(
+    x = c("premium_jump_ratio", "face_amount", "risk_class", "premium_mode", "risk_class"),
+    y = c("premium_jump_ratio", "face_amount", "risk_class", "premium_jump_ratio", "premium_jump_ratio"),
+    label = c("Y", "B-1", "B-2", "B-3", "B-7")
+  ))
+
+# Display feature effect importance plot.
+mid_diff_d10ART %>% midr::mid.importance(
+  data = df_train_2006_xw_d10ART, weights = df_train_2006_w_d10ART) %>%
+  midr::ggmid(type = "heatmap") +
+  ggtitle("GLM - XGBoost") + add_label_tmp
+```
+
+
+```{r fig-mod_importance_filtered, fig.width = 6, fig.height = 5, echo=FALSE}
+#| layout-ncol: 2
+#| layout-nrow: 1
+#| fig-cap: "Feature Effect Importance in Duration = 10, ART"
+#| fig-subcap: true
+
+# Create filtered data.
+df_train_2006_xw_d10ART <- df_train_2006_xw %>%
+  filter(duration == 10, post_level_premium_structure == "ART")
+df_train_2006_w_d10ART <- df_train_2006_xw_d10ART %>% pull(exposure)
+
+# midr::interpret.
+if(SETTING_FIT_MODELS_INST){
+mid_xgb_d10ART <- midr::interpret(
+      formula(
+        ~ (. -exposure - duration - post_level_premium_structure)*
+          (face_amount+premium_jump_ratio+issue_age)), 
+      data = df_train_2006_xw_d10ART, weights = df_train_2006_w_d10ART,
+      model = model_xgboost_2006, pred.fun = predfun_xgb,
+      link = "logit", lambda = 0.01, verbosity = 0
+    )
+mid_diff_d10ART <- midr::interpret(
+      formula(
+        ~ (. -exposure - duration - post_level_premium_structure)*
+          (face_amount+premium_jump_ratio+issue_age)), 
+      data = df_train_2006_xw_d10ART, weights = df_train_2006_w_d10ART,
+      model = model_diff, pred.fun = predfun_diff,
+      link = "logit", lambda = 0.01, verbosity = 0
+    )
+}
+# Display feature effect importance plot.
+mid_xgb_d10ART %>% midr::mid.importance(
+  data = df_train_2006_xw_d10ART, weights = df_train_2006_w_d10ART) %>%
+  midr::ggmid(type = "heatmap") +
+  ggtitle("XGBoost")
+
+# Label settings
+add_label_tmp <- add_label(data.frame(
+    x = c("premium_jump_ratio", "face_amount", "risk_class", "premium_mode", "risk_class"),
+    y = c("premium_jump_ratio", "face_amount", "risk_class", "premium_jump_ratio", "premium_jump_ratio"),
+    label = c("Y", "B-1", "B-2", "B-3", "B-7")
+  ))
+
+# Display feature effect importance plot.
+mid_diff_d10ART %>% midr::mid.importance(
+  data = df_train_2006_xw_d10ART, weights = df_train_2006_w_d10ART) %>%
+  midr::ggmid(type = "heatmap") +
+  ggtitle("GLM - XGBoost") + add_label_tmp
+```
+
+
+
+
+### Model Refinements {#sec-CaseStudy_ImprovedGLM_Refinements}
+
+`\begin{Translate}{`{=latex}
+GLM と XGBoost の予測結果の差を関数分解して得られる特徴量重要度の図， すなわち @fig-mod_importance_diff と @fig-mod_importance_filtered-2 を確認し，差異が大きいと考えられる説明変数に着目して分析を行う．
+`}{`{=latex}
+We examine the difference importance plots (@fig-mod_importance_diff and @fig-mod_importance_filtered-2) and focus our analysis on features showing large prediction discrepancies.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+なお，差が大きい説明変数全てで， GLM のモデルの改良点が見つかるとは限らない．たとえば，@fig-mod_importance_diff の X によると，`post_level_premium_structure` の主効果で差異が大きいという表示があるが，GLM はこの説明変数で層化されており，この主効果の差をモデルに明示的に反映することは出来ない．またたとえば，@fig-mod_importance_filtered-2 の Y によると，`premium_jump_ratio` の主効果で差異が大きいという表示がある．reduced baseline GLM ではこの説明変数についてビニングの上でダミー変数化している．そのビニング方法の調節が考えられる程度で，関数分解の形からモデル改善に有用な直接的な示唆を得るのは難しいと考えられる．
+`}{`{=latex}
+Not all discrepancies lead directly to actionable GLM modifications. For instance, point X in @fig-mod_importance_diff indicates a discrepancy in `post_level_premium_structure`, but since the GLM is already stratified by this factor, main effect modifications cannot be explicitly added. Similarly, point Y in @fig-mod_importance_filtered-2 indicates a discrepancy in `premium_jump_ratio`, which is already binned into dummy variables in the reduced baseline GLM.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+以上を除き，おおむね差異が大きいように思われる点から順番に吟味していく．
+`}{`{=latex}
+Excluding these cases, we evaluate the high-discrepancy components in order of magnitude.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+本文では，冒頭の3項目について改良手順を述べる．他の詳細は本ドキュメントでは割愛する．
+`}{`{=latex}
+English Here
+`}\end{Translate}`{=latex}
+
+### I-1: Main Effect of `face_amount` {.unnumbered}
+
+`\begin{Translate}{`{=latex}
+@fig-mod_importance_filtered-2 の B-1 によると，`face_amount` の主効果で差異が大きいという表示がある．この説明変数は reduced baseline GLM  では採用されていないが，この図からは解約率との何らかの関係性が示唆される．そこで，XGBoost の予測値の関数分解で得られた関数を確認する．
+`}{`{=latex}
+Point B-1 in @fig-mod_importance_filtered-2 highlights a prominent discrepancy in the main effect of `face_amount`. While omitted in our reduced baseline GLM, MID indicates its strong influence on lapse predictions.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+関数分解で得られた関数をプロットするには，`midr::ggmid()` 関数を使用する．
+`}{`{=latex}
+English here.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+`duration == 10, ART` における， `face_amount` の主効果の関数項をプロットすると @fig-mod_i1 のとおりで，高額契約ほど解約率が高いことが示唆される．
+`}{`{=latex}
+Plotting the main effect function term of `face_amount` for `duration == 10, ART` (@fig-mod_i1) reveals that higher face amounts correspond to higher predicted lapse rates.
+`}\end{Translate}`{=latex}
+
+
+```{r fig-mod_i1, fig.width = 5, fig.height = 4, out.width="45%"}
+#| fig-cap: 
+#|   - "Main Effect Plot of `face_amount`"
+mid_xgb_d10ART %>% midr::ggmid(data = df_train_2006_xw, term = "face_amount")
+```
+
+
+`\begin{Translate}{`{=latex}
+@fig-mod_importance_filtered-2 および  @fig-mod_i1 は `duration == 10, ART` に限った分析を示している．そこで，他の `duration` での様子も同時に可視化するため，`face_amount` と `duration` の2変数を組み合わせた効果を可視化すると @fig-mod_i1_int のようになる．
+`}{`{=latex}
+To examine whether this relationship holds across other durations, @fig-mod_i1_int displays the compound effect (main effects + interaction) of `face_amount` and `duration`.
+`}\end{Translate}`{=latex}
+ 
+
+```{r fig-mod_i1_int, fig.width = 6, fig.height = 4, out.width="45%"}
+#| fig-cap: 
+#|   - "Main Effect + Interaction Plot of `duration` and `face_amount`"
+mid_xgb %>% midr::ggmid(data = df_train_2006_xw %>% sample_n(500),
+                        term = "face_amount:duration", main.effects = TRUE,
+                        type = "compound") #add sample points to the plot
+```
+
+`\begin{Translate}{`{=latex}
+@fig-mod_i1_int により，`duration <= 9` では高額契約ほど解約率が低く，`duration >= 10` ではその逆であることがわかる．GLM に説明変数として `face_amount` を追加することで，精度改善に貢献するものと考えられる．
+`}{`{=latex}
+English here.
+`}\end{Translate}`{=latex}
+
+
+### I-2: Main Effect of `risk_class` {.unnumbered}
+
+
+```{r fig-mod_i2_i3, fig.width = 6, fig.height = 4}
+#| layout-ncol: 2
+#| layout-nrow: 1
+#| fig-cap: "Main Effects + Interaction Plots"
+#| fig-subcap:
+#|   - "`risk_class` and `duration`"
+#|   - "`premium_mode` and `duration`"
+mid_xgb %>% midr::ggmid(data = df_train_2006_xw %>% sample_n(500),
+                        term = "risk_class:duration", main.effects = TRUE,
+                        type = "compound")
+mid_xgb %>% midr::ggmid(data = df_train_2006_xw %>% sample_n(500),
+                        term = "premium_mode:duration", main.effects = TRUE,
+                        type = "compound")
+```
+
+
+`\begin{Translate}{`{=latex}
+@fig-mod_importance_diff の A-2 および @fig-mod_importance_filtered-2 の B-2 によると，`risk_class` の主効果で差異が大きいという表示がある．そこで I-1 と同じように `risk_class` と `duration` の2変数を組み合わせた効果を可視化すると @fig-mod_i2_i3-1 のとおり．GLM は `"Super-Pref NS"`，それ以外の `"NS"`，その他の3区分でのみ区分けしていたが，`"Undiff NS"`， `"Undiff SM"` はそれ以外の `"NS"`，`"SM"` とは異なる傾向を示している．さらに，`"Agg/Unknown"` はどれとも異なる傾向を示している．加入時の健康状態という意味では， `"Undiff"` が付されているものはそうでないものは一定程度類似しているはずであるが，実際は解約率に影響が現れる形で契約者の性質が異なる（例えば保険会社，地域，チャネル等の特性の差異がある）と考えられる．`"Agg/Unknown"` も同様に，ある特殊な契約群団を特定できる要素となっている可能性がある．健康状態そのものが解約動向にどのような影響を及ぼすかは判断の難しいところではあるが，この図を観察する限りでは解約率には差があるため，これを区分することは解約率予測精度向上に資するものと考えられる．そこで，GLM でも `"Undiff NS"`， `"Undiff SM"`，`"Agg/Unknown"` は独立した level として設定する変更を採用する[^MOD_#I-2_Detail]．
+`}{`{=latex}
+Points A-2 (@fig-mod_importance_diff) and B-2 (@fig-mod_importance_filtered-2) highlight a large discrepancy in `risk_class`. Plotting the compound effect of `risk_class` and `duration` (@fig-mod_i2_i3-1) reveals that while the baseline GLM consolidated risk classes into three broad categories, undifferentiated groups (`"Undiff NS"`, `"Undiff SM"`) and `"Agg/Unknown"` exhibit distinct lapse trends. Therefore, we update the GLM to treat `"Undiff NS"`, `"Undiff SM"`, and `"Agg/Unknown"` as independent factor levels [^MOD_#I-2_Detail].
+`}\end{Translate}`{=latex}
+
+[^MOD_#I-2_Detail]: `\translateI{`{=latex}実際は，層化によって各層の学習データが小さくなっており，対象の level に属するデータが非常に少ないと過学習に陥る．予測精度を向上させるため，一定程度の規模がある場合のみ区分することとした．区分の判断基準は次のとおりで，閾値は予測精度が向上するかによって決定した． (i) If `"Super-Pref NS"` is smaller than 50, then merge `"Super-Pref NS"` and `"NS"`. (ii) If `"Undiff NS"` or NS is smaller than 700, then merge `"Undiff NS"` and `"NS"`. (iii) If `"Agg/Unknown"` is smaller than 100, then merge `"Undiff SM"` and `"Agg/Unknown"`. (iv) If `"SM"` is smaller than 700, then merge `"Undiff SM"` and `"SM"`.`}{`{=latex}To avoid overfitting in small strata, collapsing rules are applied based on sample counts: (i) Merge `"Super-Pref NS"` with `"NS"` if count < 50; (ii) Merge `"Undiff NS"` and `"NS"` if either count < 700; (iii) Merge `"Agg/Unknown"` with `"Undiff SM"` if count < 100; (iv) Merge `"SM"` with `"Undiff SM" ` if count < 700.`}`{=latex}
+
+
+### I-3: Interaction between `premium_mode` and `premium_jump_ratio` {.unnumbered}
+
+
+`\begin{Translate}{`{=latex}
+@fig-mod_importance_diff の A-3 および @fig-mod_importance_filtered-2 の B-3 によると，`premium_mode` と `premium_jump_ratio` の交互作用で差異が大きいという表示がある．この交互作用の確認の前に，`premium_mode` の主効果について検討するため，`risk_class` と `duration` の2変数を組み合わせた効果を可視化すると @fig-mod_i2_i3-2 のとおり．GLM は `"Semiannual"`，`"Quarterly"` を統合してひとつの level としていたが，実際は解約率に差が認められるため，これらを分離する変更を採用する．一方，`"Biweekly"` は `"Monthly"` と同じ区分となっているが，群団として非常に小さいため区分の分離は行わない．
+`}{`{=latex}
+Points A-3 and B-3 indicate a significant discrepancy in the interaction between `premium_mode` and `premium_jump_ratio`. Examining the main effect of `premium_mode` across durations (@fig-mod_i2_i3-2) shows clear differences between `"Semiannual"` and `"Quarterly"` modes, prompting us to separate them into distinct levels in the GLM.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+次に，`premium_mode` と `premium_jump_ratio` の交互作用の確認のため， `duration == 10, ART` にてこの2変数の効果をプロットすると @fig-mod_i3-2  のとおり．@fig-mod_i3-2-1 は主効果の関数値を加算している一方， @fig-mod_i3-2-2  は交互作用の関数値のみをプロットしている．
+`}{`{=latex}
+Next, to examine the interaction between `premium_mode` and `premium_jump_ratio`, @fig-mod_i3-2 plots their combined effects at `duration == 10, ART`. Specifically, @fig-mod_i3-2-1 displays both the main effects and the interaction term, whereas @fig-mod_i3-2-2 isolates the interaction effect alone [^MOD_#I-3_Detail].
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+グラフに主効果を加算するかどうかは，引数 `main.effects` によって制御できる．
+`}{`{=latex}
+English Here.
+`}\end{Translate}`{=latex}
+
+
+```{r fig-mod_i3-2, fig.width = 8, fig.height = 4}
+#| layout-ncol: 2
+#| layout-nrow: 1
+#| fig-cap: "Effects of `premium_jump_ratio` and `premium_mode`"
+#| fig-subcap: true
+mid_xgb_d10ART %>% midr::ggmid(data = df_train_2006_xw %>% sample_n(500),
+                        term = "premium_jump_ratio:premium_mode", main.effects = TRUE,
+                        type = "compound") +
+      ggtitle("Duration = 10, ART, Main Effects + Interaction")
+mid_xgb_d10ART %>% midr::ggmid(data = df_train_2006_xw %>% sample_n(500),
+                        term = "premium_jump_ratio:premium_mode",
+                        type = "compound") +
+      ggtitle("Duration = 10, ART, Interaction Only")
+```
+
+`\begin{Translate}{`{=latex}
+ @fig-mod_i3-2-2 によると，`"Quarterly"` の区分では， `premium_jump_ratio` が高くなるほど解約率が高くなる，といった関係性が弱くなることが示唆されている．そこで，`duraion == 10` かつ `"Quarterly"` の場合にのみ，`premium_mode` と `premium_jump_ratio` の交互作用項を追加する変更を採用する[^MOD_#I-3_Detail]．
+`}{`{=latex}
+As indicated in Figure 7b, for the `"Quarterly"` mode, the relationship where higher `premium_jump_ratio` leads to higher lapse rates is substantially weakened. Therefore, we adopt a modification adding an interaction term between `premium_mode` and `premium_jump_ratio` exclusively when `duration == 10` and `premium_mode == "Quarterly"`.
+`}\end{Translate}`{=latex}
+
+[^MOD_#I-3_Detail]: `\translateI{`{=latex}関数項が過度に複雑にならないよう，この交互作用項では `premium_jump_ratio` のビニングを `breaks = c(0,1,2,5,99)` とする．また，学習データに実在データが無いビンでの予測が必要な場合，学習データがある最も近い `premium_jump_ratio` のビンに振り分ける．その際，より高いビンがあればそちらを，そうでなければより低いビンを採用する．`}{`{=latex}To prevent excessive model complexity, coarse binning (`breaks = c(0,1,2,5,99)`) is applied to `premium_jump_ratio` for this specific interaction term. If a prediction is required for a bin that lacks observed data in the training set, it is remapped to the nearest bin containing observed data, prioritizing a higher bin if available, or a lower bin otherwise.`}`{=latex}
+
+### モデル構築
+
+`\begin{Translate}{`{=latex}
+修正 I-1 により `face_amount` を復元した「**baseline GLM** 」，つまり SOA が構築したものと同等のモデルを次のとおり構築する．前処理のための関数をごく一部修正するだけでよい．
+`}{`{=latex}
+English Here.
+`}\end{Translate}`{=latex}
+
+
+```{r prepfun_modi1_xy}
+prepfun_modi1_xy <- function(df_tmp){
+  df_tmp %>% prep_toint_age %>% prep_toint_pjratio %>%
+    mutate(
+      issue_age_sq = issue_age^2, issue_age_log = log(issue_age),
+      risk_class_group = risk_class %>%
+        factor(levels = levels_risk_class,
+               labels = c("Super-Pref NS","NS","NS","NS","NS","SM","SM","SM","SM")),
+      premium_mode_group = premium_mode %>%
+        factor(levels = levels_premium_mode,
+               labels = c("Annual","Semiannual/Quarterly","Semiannual/Quarterly",
+                          "Monthly/Biweekly","Monthly/Biweekly","Unknown/Other")),
+      premium_jump_ratio_group = cut(
+        if_else(premium_jump_ratio_unknown == 1, 0, premium_jump_ratio),
+        breaks = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 99), right = FALSE)) %>%
+    select(duration, post_level_premium_structure,
+           issue_age, issue_age_sq, issue_age_log, risk_class_group,
+           premium_mode_group, premium_jump_ratio_group, 
+           face_amount, #I-1
+           exposure, lapse)
+}
+```
+
+```{r model_modi1_2006_code, eval=FALSE}
+df_train_2006_modi1 <- df_train_2006 %>% prepfun_modi1_xy
+df_test_2006_modi1 <- df_test_2006 %>% prepfun_modi1_xy
+
+model_modi1_2006 <- glm(
+  cbind(lapse, exposure - lapse) ~
+    (. + premium_jump_ratio_group * issue_age - 1) : duration : post_level_premium_structure,
+  family = quasibinomial(), 
+  data = df_train_2006_modi1)
+```
+
+
+```{r model_modi1_2006, include=FALSE}
+df_train_2006_modi1 <- df_train_2006 %>% prepfun_modi1_xy
+df_test_2006_modi1 <- df_test_2006 %>% prepfun_modi1_xy
+
+if(SETTING_FIT_MODELS_INST){
+model_modi1_2006 <- glm(
+  cbind(lapse, exposure - lapse) ~
+    (. + premium_jump_ratio_group * issue_age - 1) : duration : post_level_premium_structure,
+  family = quasibinomial(), 
+  data = df_train_2006_modi1)
+}
+```
+
+
+
+`\begin{Translate}{`{=latex}
+さらに，元論文における10個の改良を全て施したモデルの構築方法は次のとおり．改良の大部分は，前処理のための関数の中に実装される．
+`}{`{=latex}
+English Here.
+`}\end{Translate}`{=latex}
+
+
+```{r prepfun_mod_xy}
+prepfun_mod_xy <- function(df_tmp){
+  df_tmp %>% prep_toint_age %>% prep_toint_pjratio %>%
+    mutate(
+      premium_mode_oo = #I-4
+        if_else(
+          duration >= "10" & post_level_premium_structure == "Other" &
+          premium_mode == "Unknown/Other", 1, 0),
+      post_level_premium_structure = if_else( #I-4
+        premium_mode_oo == 1, "ART", post_level_premium_structure),
+      premium_mode = if_else( #I-4
+        premium_mode_oo == 1, "Monthly", premium_mode),
+      issue_age_sq = issue_age^2, issue_age_log = log(issue_age),
+      issue_age_70 = if_else(issue_age >= 70 & duration == "06-09", 1, 0), #I-5
+      issue_age_d10ART = if_else( #I-8
+        (duration == "06-09" | duration == "10") & post_level_premium_structure == "ART",
+        issue_age, 0
+        ),
+      # risk_class_group = risk_class %>% #cf) non #I-2
+      #   factor(levels = levels_risk_class,
+      #          labels = c("Super-Pref NS","NS","NS","NS","NS","SM","SM","SM","SM")),
+      risk_class_group = risk_class %>% #I-2
+        factor(levels = levels_risk_class,
+               labels = c("Super-Pref NS","NS","NS","NS","Undiff NS",
+                          "SM","SM","Undiff SM","Agg/Unknown")),
+      risk_class_group = if_else( #I-2 (adjusted to 2006-train)
+        risk_class_group == "Undiff NS" &
+          (duration != "06-09" |  post_level_premium_structure != "ART"),
+        "NS",
+        if_else(
+          risk_class_group == "Undiff SM" &
+            (duration >= "11" &  post_level_premium_structure == "ART" |
+               duration <= "12" &  post_level_premium_structure == "Other") |
+            risk_class_group == "Agg/Unknown" &
+            (duration <= "11" &  post_level_premium_structure == "ART"),
+          "SM",
+          risk_class_group
+        )
+      ),
+      risk_class_int = factor( #I-6 (adjusted to 2006-train)
+        if_else(
+          (risk_class == "Undiff SM" | risk_class == "Non-Pref NS") & duration == "06-09" |
+            (risk_class == "Non-Pref SM" | risk_class == "Undiff NS" ) &
+            duration == "06-09" & post_level_premium_structure == "ART" |
+            risk_class == "Non-Pref NS" &
+            duration == "10" &  post_level_premium_structure == "ART",
+          risk_class, "Super-Pref NS"),
+        levels = levels_risk_class),
+      premium_mode_group = premium_mode %>% #cf) non #I-3
+        factor(levels = levels_premium_mode,
+               labels = c("Annual","Semiannual/Quarterly","Semiannual/Quarterly",
+                          "Monthly/Biweekly","Monthly/Biweekly","Unknown/Other")),
+      premium_mode_group = premium_mode %>% #I-3
+        factor(levels = levels_premium_mode,
+               labels = c("Annual","Semiannual","Quarterly",
+                          "Monthly/Biweekly","Monthly/Biweekly","Unknown/Other")),
+      premium_mode_group_q = if_else( #I-3
+        duration == "10" & premium_mode == "Quarterly", 1, 0),
+      premium_jump_ratio_group = cut(
+        if_else(premium_jump_ratio_unknown == 1, 0, premium_jump_ratio),
+        breaks = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 99), right = FALSE),
+      premium_jump_ratio_group2 = cut( #I-3
+        if_else(premium_jump_ratio_unknown == 1, 0, premium_jump_ratio),
+        breaks = c(0, 1, 2, 5, 99), right = FALSE),
+      premium_jump_ratio_rc_NPNS = if_else( #I-7 (adjusted to 2006-train)
+        !(duration >= "11" & post_level_premium_structure == "Other") &
+          risk_class == "Non-Pref NS", premium_jump_ratio, 0),
+      premium_jump_ratio_rc_PBNS = if_else( #I-7 (adjusted to 2006-train)
+        !(duration == "12" & post_level_premium_structure == "Other") &
+          risk_class == "Pref Best NS" & (duration >= "10"), premium_jump_ratio, 0),
+      face_amount_d09PrUnHi = if_else( #I-9 (adjusted to 2006-train)
+        duration == "06-09" & post_level_premium_structure == "ART" &
+          premium_jump_ratio_unknown == 1 & face_amount == "1M-",
+        1, 0)
+      ) %>%
+    select(duration, post_level_premium_structure,
+           issue_age, issue_age_sq, issue_age_log, risk_class_group,
+           issue_age_70, #I-5
+           issue_age_d10ART, #I-8
+           risk_class_int, #I-6
+           premium_mode_group, premium_jump_ratio_group, 
+           premium_mode_oo, #I-4
+           premium_jump_ratio_group2, premium_mode_group_q, #I-3
+           premium_jump_ratio_rc_NPNS, premium_jump_ratio_rc_PBNS, #I-7
+           face_amount, #I-1
+           face_amount_d09PrUnHi, #I-9
+           gender, #I-10
+           exposure, lapse)
+}
+```
+
+
+
+`\begin{Translate}{`{=latex}
+モデル構築のステップでは，いくつかの交互作用項を明示的に追加するのみである．前処理で追加された説明変数は formula の `.` 指定で自動的にモデルに追加される．
+`}{`{=latex}
+English Here.
+`}\end{Translate}`{=latex}
+
+```{r model_mod_2006_code, eval=FALSE}
+df_train_2006_mod <- df_train_2006 %>% prepfun_mod_xy
+df_test_2006_mod <- df_test_2006 %>% prepfun_mod_xy
+
+model_mod_2006 <- glm(
+  cbind(lapse, exposure - lapse) ~
+    (. + premium_jump_ratio_group * issue_age  
+       -premium_jump_ratio_group2 -premium_mode_group_q #I-3
+       + premium_jump_ratio_group2 : premium_mode_group_q #I-3
+       + risk_class_int * issue_age #I-6
+       + issue_age_d10ART : face_amount #I-8
+     - 1) : duration : post_level_premium_structure,
+  family = quasibinomial(), 
+  data = df_train_2006_mod)
+```
+
+
+```{r model_mod_2006, echo=FALSE}
+df_train_2006_mod <- df_train_2006 %>% prepfun_mod_xy
+df_test_2006_mod <- df_test_2006 %>% prepfun_mod_xy
+
+if(SETTING_FIT_MODELS_INST){
+model_mod_2006 <- glm(
+  cbind(lapse, exposure - lapse) ~
+    (. + premium_jump_ratio_group * issue_age  
+       -premium_jump_ratio_group2 -premium_mode_group_q #I-3
+       + premium_jump_ratio_group2 : premium_mode_group_q #I-3
+       + risk_class_int * issue_age #I-6
+       + issue_age_d10ART : face_amount #I-8
+     - 1) : duration : post_level_premium_structure,
+  family = quasibinomial(), 
+  data = df_train_2006_mod)
+}
+```
+
+<!--SAVE MODELS-->
+
+```{r save_models, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+  save(model_soa_2006, model_xgboost_2006, model_mod_2006, model_modi1_2006, 
+       mid_xgb, mid_diff, 
+       mid_xgb_d10ART, mid_diff_d10ART,
+       file = SETTING_FNAME_MODELS_INST_BASIC)
+}
+```
+
+
+```{r include=FALSE}
+update_geom_defaults("point", NULL)
+```
+
+
+# Statistical Predictive Performance
+
+## Reduced Baseline GLM
+
+`\begin{Translate}{`{=latex}
+Reduced Baseline GLM のスコアは次のとおり．関数 `calc_logloss()` の引数 `mean` を `FALSE` とした場合は Log-loss の総和が， `TRUE` とした場合は加重平均値が出力される．元論文の I-1 の節で表示した数値がここで再現される．
+`}{`{=latex}
+English Here.
+`}\end{Translate}`{=latex}
+
+
+```{r model_soa_2006_score}
+pred_soa <- model_soa_2006 %>%
+  predict(df_test_2006_soa %>% prepfun_soa_xy_test_2006, type = c("response"))
+
+calc_logloss(
+  pred_soa,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = TRUE
+)#0.2988156
+
+calc_logloss(
+  pred_soa,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = FALSE
+)#238153.1
+
+calc_auc(
+  pred_soa,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure)
+)#0.8065347
+```
+
+## XGBoost Model
+
+`\begin{Translate}{`{=latex}
+XGBoost のスコアは次のとおり．元論文の Statistical Predictive Performance の節で示した数値（Validation Year は 2007）が再現される．
+`}{`{=latex}
+English Here.
+`}\end{Translate}`{=latex}
+
+```{r model_xgb_2006_score}
+df_test_2006_mm <- df_test_2006 %>% get_mm
+df_test_2006_mm <- df_test_2006_mm[, -constant_cols_2006, drop = FALSE]
+pred_xgb <- model_xgboost_2006 %>% predict(df_test_2006_mm)
+
+calc_logloss(
+  pred_xgb,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = TRUE
+)#0.2935507
+
+calc_logloss(
+  pred_xgb,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = FALSE
+)#233957.1
+
+calc_auc(
+  pred_xgb,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure)
+)#0.820604
+```
+
+
+## Baseline GLM
+
+
+`\begin{Translate}{`{=latex}
+XGBoost のスコアは次のとおり．@sec-CaseStudy_SOA で注意したように，元論文の Statistical Predictive Performance の節で示した数値からは，Log-loss で僅かにずれが生じる．
+`}{`{=latex}
+English Here.
+`}\end{Translate}`{=latex}
+
+```{r model_modi1_2006_score}
+pred_modi1 <- model_modi1_2006 %>%
+  predict(df_test_2006_modi1 %>% prepfun_soa_xy_test_2006, type = c("response"))
+
+calc_logloss(
+  pred_modi1,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = TRUE
+)#0.2984396
+
+calc_logloss(
+  pred_modi1,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = FALSE
+)#237853.5
+
+calc_auc(
+  pred_modi1,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure)
+)#0.8073218
+```
+
+
+## Improved GLM
+
+
+`\begin{Translate}{`{=latex}
+XGBoost のスコアは次のとおり．@sec-CaseStudy_SOA で注意したように，元論文の Statistical Predictive Performance の節で示した数値からは，Log-loss で僅かにずれが生じる．なお，Baseline GLM と比べて Log-loss ではわずかに悪化している点は元論文と同様である．
+`}{`{=latex}
+English Here.
+`}\end{Translate}`{=latex}
+
+
+```{r model_mod_2006_score}
+pred_mod <- model_mod_2006 %>%
+  predict(df_test_2006_mod %>% prepfun_soa_xy_test_2006, type = c("response"))
+
+calc_logloss(
+  pred_mod,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = TRUE
+)#0.2984574
+
+calc_logloss(
+  pred_mod,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = FALSE
+)#237867.7
+
+calc_auc(
+  pred_mod,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure)
+)#0.8090849
+```
+
+
+
+
+
+
+# Acknowledgments {.unnumbered}
+
+`\begin{Translate}{`{=latex}
+本研究の実施にあたり，公表データ（SOA 10-Year Level Premium Term Lapse Study）を提供いただいた Society of Actuaries (SOA) に深謝いたします．なお，本論文の作成プロセスにおける英文表現の推敲およびコード構築の補助にあたっては，適切な人間による確認と責任のもとで生成 AI ツール（Gemini / ChatGPT 等）を活用いたしました．
+`}{`{=latex}
+The authors gratefully acknowledge the Society of Actuaries (SOA) for providing the public dataset (SOA 10-Year Level Premium Term Lapse Study) utilized in this study. In addition, generative AI tools (such as Gemini and ChatGPT) were used to assist with English language editing and R code refinement, with all final content thoroughly reviewed and verified by the authors.
+`}\end{Translate}`{=latex}
+<!--
+また，研究の方向性や実務的分析に関して貴重なコメントと助言をいただいた査読者および同僚の皆様に感謝申し上げます．
+We also express our sincere appreciation to the reviewers and colleagues whose insightful comments and suggestions greatly improved this paper. 
+-->
+
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+
