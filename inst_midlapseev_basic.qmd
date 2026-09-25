@@ -1,23 +1,23 @@
 ---
-title: "\\translate{MID を使用した解約率予測 GLM の改良 - 基本編}{English Here}"
+title: "\\translate{MID を使用した解約率予測 GLM の改良 - 基本編}{Enhancing GLM-Based Lapse Rate Models Using MID - Basic Tutorial}"
 author:
   - Reiji Kozuma\thanks{Daido Life Insurance Company, \texttt{rktkdm@gmail.com}}
   - Ryoichi Asashiba\thanks{Daido Life Insurance Company, \texttt{ryoichi.asashiba@gmail.com}}
   - Yoshihiro Matsumori\thanks{Sompo Japan Insurance Inc., \texttt{ymatsumori1@sompo-japan.co.jp}}
   - Hirokazu Iwasawa\thanks{Graduate School of Accountancy, Waseda University, \texttt{iwahiro@bb.mbn.or.jp}}
+date: "`r Sys.Date()`"
 format:
   pdf:
     pdf-engine: xelatex
     documentclass: bxjsarticle
-    classoption: xelatex,ja=standard,base=10pt #10pt 自体は欧文では一般的らしい、11pt は収まらず、10.5pt はまだ収まる
-    toc: true
-    toc-title: "目次"
-    toc-depth: 4
+    classoption: xelatex,ja=standard,base=10pt
+#    toc: true
+#    toc-title: "Table of contents"
+#    toc-depth: 4
     number-sections: true
     fig-width: 6
     fig-height: 4
     link-citations: true
-    #https://stackoverflow.com/questions/63222203/rmarkdown-wrap-code-in-chunks-but-keep-breaks-after-pipe
     include-in-header:
       - text: |
           %%% 2. フォント・文字設定
@@ -120,8 +120,8 @@ format:
           \newboolean{showLanguage}
           \newboolean{showJapanese}
           \newboolean{showEnglish}
-          \setboolean{showLanguage}{true}
-          \setboolean{showJapanese}{true}   % 日本語表示する場合 true
+          \setboolean{showLanguage}{false}
+          \setboolean{showJapanese}{false}   % 日本語表示する場合 true
           \setboolean{showEnglish}{true}    % 英語表示する場合 true
           \newif\ifshowLanguageI
           \newif\ifshowJapaneseI
@@ -156,25 +156,18 @@ format:
           % 2ページ目冒頭：本来のタイトルブロック（\oldmaketitle）を出力
           \oldmaketitle
     keep-tex: true
-#  html:
-#    toc: true
-#    toc-depth: 4
-#    fig-width: 6
-#    fig-height: 5
-#    df-print: "paged"
-#    embed-resources: true
 execute:
   cache: true
 csl: apa.csl
-bibliography: papermidrreferences_2614.bib
-# nocite: |
-#   @*
+bibliography: papermidrreferences_2617.bib
 ---
 
 
 
 ```{r comment, include=FALSE, eval=FALSE}
-## 2026/9/14
+## 2026/9/14 a rough draft for the initial commit
+## 2026/9/15 renaming objects
+## 2026/9/25 english translation
 ```
 
 ```{r setup_qmd_flg, include=FALSE, cache.rebuild=TRUE}
@@ -183,9 +176,10 @@ SETTING_IS_ROOT_DOCUMENT <- !exists("FLG_IN_RENDERING") || !FLG_IN_RENDERING
 
 ```{r setup_qmd, include=FALSE, cache.rebuild=TRUE}
 knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+options(tibble.width = Inf, pillar.sigfig = 5)
 
 # install packages
-pkgs <- c("tidyverse", "gridExtra", "ranger", "tuneRanger", "iml", "devtools", "ROCR", "kableExtra") #midr
+pkgs <- c("tidyverse", "readxl", "xgboost", "ROCR", "devtools")
 for (pkg in pkgs) {
   if (!(pkg %in% installed.packages())) {
     install.packages(pkg)
@@ -209,13 +203,6 @@ remove(list=objects())
 
 \pagenumbering{gobble}
 
-```{r setup_include_dependents, include=FALSE, cache.rebuild=TRUE}
-#source("research2025soa_common_0810.R")
-#SETTING_IS_ROOT_DOCUMENT <- FALSE
-#doc_prep <- it.read('research2025soa_prep_2600.qmd')
-#SETTING_IS_ROOT_DOCUMENT <- !exists("FLG_IN_RENDERING") || !FLG_IN_RENDERING
-```
-
 
 ```{r setup_setting_fname, include=FALSE, cache.rebuild=TRUE}
 SETTING_FNAME_MODELS_INST_BASIC <- "models_inst_basic.RData" #SETTING_FIT_MODELS_INSTで省略した時の読み込み先
@@ -229,43 +216,52 @@ if(!SETTING_FIT_MODELS_INST){
 ```
 
 
-\begin{abstract}
-\begin{Translate}{
-本ドキュメントは，論文●●において提案した，新たな 解釈手法 MID を活用した EV 解約率前提用 GLM の改善過程における基本的な手順を，直ぐに利用可能なコード例の形で示すものである．データセットの前処理，その研究で利用したモデルの構築，およびパッケージ midr を活用した可視化の方法について述べる．
+`\begin{abstract}\begin{Translate}{`{=latex}
+本ドキュメントは，元論文 @KozumaICA2026 において提案した，新たな 解釈手法 MID を活用した EV 解約率前提用 GLM の改善過程における基本的な手順を，直ぐに利用可能なコード例の形で示すものである．データセットの前処理，その研究で利用したモデルの構築，およびパッケージ midr を活用した可視化の方法について述べる．
 
 なお，使用するモデルや評価指標，解釈手法の解説については元となる論文に譲ることとし，本ドキュメントではコードを示すことによる具体的な使用方法の説明に注力する．また，EVの簡易計算や，論文のデータの再現のためのドキュメントは，別ファイルで提供する．
 
-コードの多くは元の研究の内容を再現するためのものであり，それらの中には，初学者にとっては理解が難しいコードも存在する．そのため，初学者は，Section~\ref{sec-CaseStudy_ImprovedGLM_Refinements} 以外の内容については単に記載されているコードを深く考えずにそのまま実行するだけでもさしあたりは問題ない．
- }{%
-English Here
- }\end{Translate}
-\end{abstract}
+コードの多くは元の研究の内容を再現するためのものであり，それらの中には，初学者にとっては理解が難しいコードも存在する．そのため，初学者は，Section \ref{sec-CaseStudy_ImprovedGLM_Refinements} 以外の内容については単に記載されているコードを深く考えずにそのまま実行するだけでもさしあたりは問題ない．
+`}{`{=latex}
+This document presents ready-to-use code examples illustrating the foundational workflow proposed in the original paper [@KozumaICA2026] for enhancing GLM-based lapse rate models for EV calculation using a novel interpretation method, MID. We cover dataset preprocessing, model construction, and visualization techniques using the midr package.
+
+Detailed theoretical explanations of the predictive models, evaluation metrics, and interpretation methods are left to the original paper; this document focuses on demonstrating practical usage through concrete R implementations. Separate documents provide the simplified EV valuation framework and the complete code required to replicate all empirical results in the paper.
+
+Much of the implementation is designed to reproduce the research setup faithfully, which may include code structures that appear complex to beginners. Readers who wish to focus on the core methodology may initially execute the surrounding code as provided and focus their attention on the model refinement process in Section \ref{sec-CaseStudy_ImprovedGLM_Refinements}.
+`}\end{Translate}\end{abstract}`{=latex}
 
 
+```{=latex}
+\vspace{1em}
+\renewcommand{\contentsname}{\translateI{目次}{Table of Contents}}
+\tableofcontents
+\clearpage % 目次の後に改ページして本文（第1章）を開始
+```
 
-# 準備
+# `\translateI{`{=latex}準備`}{`{=latex}Preparation`}`{=latex}
 
-## パッケージの読み込み
+## `\translateI{`{=latex}パッケージの読み込み`}{`{=latex}Loading Packages`}`{=latex}
 
 `\begin{Translate}{`{=latex}
 本ドキュメントで使用するパッケージを読み込む．
 `}{`{=latex}
-English Here
+Load the R packages required for this tutorial.
 `}\end{Translate}`{=latex}
 
-```{r load_packages_paper, cache.rebuild=TRUE}
+```{r load_packages_inst_basic, cache.rebuild=TRUE}
 library(midr)
 library(tidyverse)
+library(xgboost)
 library(ROCR)
 ```
 
 
-## データの読み込み
+## `\translateI{`{=latex}データの読み込み`}{`{=latex}Loading and Preprocessing Data`}`{=latex}
 
 `\begin{Translate}{`{=latex}
 最初に，本研究で利用したデータセット @SOA2014Study を読み込む[^dataset_URL]．
 `}{`{=latex}
-English Here
+First, we load the dataset from the SOA 10-Year Level Premium Term Lapse Study [@SOA2014Study] utilized in our research [^dataset_URL].
 `}\end{Translate}`{=latex}
 
 [^dataset_URL]: [https://github.com/kevinykuo/insurance/tree/master/data](https://github.com/kevinykuo/insurance/tree/master/data) `\translateI{からダウンロード可能．}{Available for download.}`{=latex}
@@ -274,7 +270,6 @@ English Here
 # install.packages("devtools")
 # devtools::install_github("kasaai/insurance")
 library(insurance)
-library(tidyverse)
 df_raw <- lapse_study
 ```
 
@@ -282,16 +277,16 @@ df_raw <- lapse_study
 `\begin{Translate}{`{=latex}
 次に，データを利用しやすいように前処理を行う．便宜上追加した ID 列を除けば，元論文で説明したとおりである．
 `}{`{=latex}
-English Here
+Next, we preprocess the data for analysis. Aside from adding an ID column for tracking, the transformations follow the definitions described in the original paper.
 `}\end{Translate}`{=latex}
 
 
 ```{r data_prep, warning=FALSE}
-# ID 列の追加
+# Add ID column
 df_raw <- df_raw %>% mutate(ID = as.integer(rownames(df_raw)))
 
-# lapse_study_year (Convert from string "yyyy-(yyyy+1)" to integer yyyy),
-# issue_year, duration
+# Convert lapse_study_year from string "yyyy-(yyyy+1)" to integer yyyy,
+# and format issue_year and duration
 df_raw <- df_raw %>% mutate(
     lapse_study_year = as.integer(substr(lapse_study_year, 1, 4)),
     issue_year = 
@@ -304,7 +299,7 @@ df_raw <- df_raw %>% mutate(
       ) %>% as.ordered()
     )
 
-# post_level_premium_structure
+# Standardize post_level_premium_structure
 df_raw <- df_raw %>% mutate(
   post_level_premium_structure = 
     if_else(
@@ -312,7 +307,7 @@ df_raw <- df_raw %>% mutate(
       "ART", "Other"
     ) %>% factor(levels = c("ART", "Other")))
 
-# premium_jump_ratio
+# Format premium_jump_ratio bands
 df_raw <- df_raw %>% mutate(
   premium_jump_ratio =
     case_when(
@@ -322,7 +317,7 @@ df_raw <- df_raw %>% mutate(
         (function(x) sprintf("%#2d.01-%#2d.00", x, x+1))) %>%
     as.factor())
 
-# Others
+# Format categorical factor levels
 levels_risk_class <-
   c("Super-Pref NS","Pref Best NS", "Pref Resid NS", "Non-Pref NS", "Undiff NS",
     "Pref SM", "Non-Pref SM", "Undiff SM", "Agg/Unknown")
@@ -343,7 +338,7 @@ df_raw <- df_raw %>% mutate(
            labels = c("-100K", "100K-250K", "250K-1M", "1M-"), 
            ordered = TRUE))
 
-# Drop unused data.
+# Drop unused columns and filter out zero-exposure records
 df_raw <- df_raw %>% select(
     ID, lapse_study_year, policy_year, 
     duration,
@@ -357,7 +352,7 @@ df_all <- df_all %>% select(-lapse_amount) %>%
   rename(exposure = exposure_count) %>%
   rename(lapse = lapse_count)
 
-# 目的変数として，各グループの解約率を計算
+# Calculate the observed lapse rate as the target variable
 df_all <- df_all %>% mutate(lapse_rate = lapse / exposure)
 
 prep_toint_pjratio <- function(df_raw){
@@ -374,7 +369,7 @@ prep_toint_pjratio <- function(df_raw){
 `\begin{Translate}{`{=latex}
 後で説明するように，MID による関数分解を行うモデルは 2004-2006保険年度で学習したもの（Validation Year は 2007）とするので，このデータを抽出して準備する．
 `}{`{=latex}
-English Here
+As discussed later, functional decomposition via MID is conducted on the model trained on the 2004–2006 policy years (validation year 2007). We extract and prepare this specific training and test split.
 `}\end{Translate}`{=latex}
 
 
@@ -386,16 +381,16 @@ df_test_2006 <- df_all %>%
   filter(lapse_study_year == year_midr+1)
 ```
 
-## 評価関数の準備
+## `\translateI{`{=latex}評価関数の準備`}{`{=latex}Evaluation Metric Functions`}`{=latex}
 
 `\begin{Translate}{`{=latex}
-Log-loss を重み付きで計算する関数の実装を行う．の引数 `mean` を `FALSE` とした場合は Log-loss の総和が， `TRUE` とした場合は加重平均値が出力される．
+Log-loss を重み付きで計算する関数の実装を行う．本関数の引数 `mean` を `FALSE` とした場合は Log-loss の総和が， `TRUE` とした場合は加重平均値が出力される．
 `}{`{=latex}
-English Here
+We define a helper function to compute the weighted Log-loss. Setting the argument `mean = FALSE` returns the total weighted Log-loss, while `mean = TRUE` computes the weighted average.
 `}\end{Translate}`{=latex}
 
 
-```{r}
+```{r meas_logloss}
 xlogy <- function(x, y){
   if_else(x == 0, 0, x * log(y))
 }
@@ -421,7 +416,8 @@ calc_logloss <- function(y_pred, y_act, w = NULL, mean = T){
 続いて，ROC-AUC を重み付きで計算する関数の実装を行う．
 参考: [ROCR/R/prediction.R at master · ipa-tys/ROCR](https://github.com/ipa-tys/ROCR/blob/master/R/prediction.R)
 `}{`{=latex}
-English Here
+Next, we implement a function to compute the weighted ROC-AUC.
+Reference: [ROCR/R/prediction.R at master · ipa-tys/ROCR](https://github.com/ipa-tys/ROCR/blob/master/R/prediction.R)
 `}\end{Translate}`{=latex}
 
 
@@ -467,21 +463,21 @@ calc_auc <- function(y_pred, y_act, w = NULL, verbose = FALSE){
 ```
 
 
-# モデルの構築
+# `\translateI{`{=latex}モデルの構築`}{`{=latex}Model Construction`}`{=latex}
 
 ## Reduced Baseline GLM {#sec-CaseStudy_SOA}
 
 `\begin{Translate}{`{=latex}
 本研究では複数のモデルを取り扱う．モデルの前処理もモデルによって異なることから，前処理部分をモデル固有の関数として実装することで，コードの見通しをよくする．
 `}{`{=latex}
-English Here
+Because this study examines multiple models with distinct feature engineering requirements, implementing preprocessing workflows as model-specific functions improves code modularity and readability.
 `}\end{Translate}`{=latex}
 
 
 `\begin{Translate}{`{=latex}
 まず，`issue_age` に対しては，SOA のレポート P. 39 に記載された代表年齢に変換する関数を作成する．
 `}{`{=latex}
-English Here
+First, we construct a function to map categorical `issue_age` groups to numeric representative ages, referencing Page 39 of the SOA report.
 `}\end{Translate}`{=latex}
 
 
@@ -501,14 +497,14 @@ prep_toint_age <- function(df_raw){
 ```
 
 `\begin{Translate}{`{=latex}
-次に，SOA の作成した GLM と同様の前処理を行う関数を作成する．ただし，ここで構築するのは `face_amount` を取り除いた the reduced Baseline GLM である．
+次に，SOA の作成した GLM と同様の前処理を行う関数を作成する．ただし，ここで構築するのは `face_amount` を取り除いた Reduced Baseline GLM である．
 `}{`{=latex}
-English Here
+Next, we define the preprocessing function matching the SOA baseline GLM specification. Here, we construct the Reduced Baseline GLM, in which `face_amount` is intentionally omitted.
 `}\end{Translate}`{=latex}
 
 
-```{r prepfun_soa_xy}
-prepfun_soa_xy <- function(df_tmp){
+```{r prepfun_soared_xy}
+prepfun_soared_xy <- function(df_tmp){
   df_tmp %>% prep_toint_age %>% prep_toint_pjratio %>%
     mutate(
       issue_age_sq = issue_age^2, issue_age_log = log(issue_age),
@@ -531,57 +527,56 @@ prepfun_soa_xy <- function(df_tmp){
 `\begin{Translate}{`{=latex}
 以上の前処理を実際に適用したデータフレームを作成しておく．
 `}{`{=latex}
-English Here
+We apply these preprocessing functions to prepare the training and test datasets.
 `}\end{Translate}`{=latex}
 
 
 
-```{r df_2006_soa}
-df_train_2006_soa <- df_train_2006 %>% prepfun_soa_xy
-df_test_2006_soa <- df_test_2006 %>% prepfun_soa_xy
+```{r df_2006_soared}
+df_train_2006_soared <- df_train_2006 %>% prepfun_soared_xy
+df_test_2006_soared <- df_test_2006 %>% prepfun_soared_xy
 ```
 
 `\begin{Translate}{`{=latex}
 最後に，学習データに対して `glm()` 関数を適用し，モデルを構築する． `duration : post_level_premium_structure` の記述は，これらについて層化したモデルとしていることを表す．
 `}{`{=latex}
-Excluding preprocessing, the R code for model construction is shown below. The syntax `duration : post_level_premium_structure` represents stratification across these factors.
+Finally, we train the model on the preprocessed training data using `glm()`. The interaction syntax `duration : post_level_premium_structure` specifies a model stratified across these factors.
 `}\end{Translate}`{=latex}
 
 
 `\begin{Translate}{`{=latex}
-`duration : post_level_premium_structure` の指定は計画行列が巨大になることから，層ごとに別々のGLMを構築するよりも計算時間がかかる．この観点で元論文で掲載した精度評価には，層ごとに別々のGLMを構築したものを使用している．両者は本質的に同等なモデルであるが，1件も解約が発生しないケースの予測においてわずかに出力される確率値が異なっている．従って，本ドキュメントによる実装は元論文の結果を厳密には再現しない
+`duration : post_level_premium_structure` の指定は計画行列が巨大になることから，層ごとに別々のGLMを構築するよりも計算時間がかかる．この観点で元論文で掲載した精度評価には，層ごとに別々のGLMを構築したものを使用している．両者は本質的に同等なモデルであるが，1件も解約が発生しないケースの予測においてわずかに出力される確率値が異なっている．従って，本ドキュメントによる実装は元論文の結果を厳密には再現しない．
 `}{`{=latex}
-<Need to modify Translation>
-Specifying `duration : post_level_premium_structure` creates a large design matrix. In practice, fitting separate GLMs for each stratum is computationally faster. For the evaluation results in xxx and xxx, separately fitted GLMs are used. While mathematically equivalent, slight numerical variations in predicted probabilities occur in strata with zero observed lapses.
+Specifying `duration : post_level_premium_structure` creates an extensive design matrix, requiring more computational time than fitting separate GLMs for each stratum. For computational efficiency, the empirical evaluations in the original paper were conducted using separately fitted GLMs across strata. While mathematically equivalent, minor numerical differences in predicted probabilities occur in strata with zero observed lapses. Consequently, the streamlined implementation in this tutorial does not strictly reproduce the paper's figures down to the last decimal place.
 `}\end{Translate}`{=latex}
 
 
-```{r model_soa_2006_code, eval=FALSE}
-model_soa_2006 <- glm(
+```{r model_soared_2006_code, eval=FALSE}
+model_soared_2006 <- glm(
   cbind(lapse, exposure - lapse) ~
     (. + premium_jump_ratio_group * issue_age  - 1) : duration : post_level_premium_structure,
   family = quasibinomial(), 
-  data = df_train_2006_soa)
+  data = df_train_2006_soared)
 ```
 
-```{r model_soa_2006, echo=FALSE}
+```{r model_soared_2006, echo=FALSE}
 if(SETTING_FIT_MODELS_INST){
-model_soa_2006 <- glm(
+model_soared_2006 <- glm(
   cbind(lapse, exposure - lapse) ~
     (. + premium_jump_ratio_group * issue_age  - 1) : duration : post_level_premium_structure,
   family = quasibinomial(), 
-  data = df_train_2006_soa)
+  data = df_train_2006_soared)
 }
 ```
 
 `\begin{Translate}{`{=latex}
 学習データで現れなかったグループがテストデータには現れることがあるという点に注意が必要である．そのようなデータに対しても予測できるよう，テストデータにも前処理が必要となる．今回使用する年度のデータに対しては，次のような前処理が必要となるので，それを関数として作成する．
 `}{`{=latex}
-English Here
+Policy groups absent in the training data may occasionally appear in the test data. To ensure valid predictions, preprocessing rules must be defined for the test data to handle unobserved factor levels gracefully. We implement the adjustments required for this specific evaluation year as a dedicated function.
 `}\end{Translate}`{=latex}
 
-```{r prepfun_soa_xy_test_2006}
-prepfun_soa_xy_test_2006 <- function(df_tmp){
+```{r prepfun_soared_xy_test_2006}
+prepfun_soared_xy_test_2006 <- function(df_tmp){
   df_tmp %>% mutate(
     premium_jump_ratio_group = if_else(
       post_level_premium_structure == "ART" & duration == "10" & 
@@ -607,7 +602,7 @@ prepfun_soa_xy_test_2006 <- function(df_tmp){
 ```
 
 
-## XGBoost Model
+## `\translateI{`{=latex}XGBoost モデル`}{`{=latex}XGBoost Model`}`{=latex}
 
 `\begin{Translate}{`{=latex}
 次に，GLM の改良に利用するブラックボックスモデルとして XGBoost による予測モデルを構築する．
@@ -616,18 +611,14 @@ Next, we train an XGBoost predictive model as the high-performing black-box benc
 `}\end{Translate}`{=latex}
 
 `\begin{Translate}{`{=latex}
-`xgb.cv()` 関数などのパラメータ `params` に与えるパラメータについては次のとおりである．パラメータ `objective`に `"reg:logistic"` を指定し，ロジスティック損失関数を objective として確率を出力させる．また，過学習防止のために木の複雑さを設定する必要がある．その交差検証での判定基準として，パラメータ `eval_metric` を `"logloss"` に指定する．加えて，ハイパーパラメータを設定する．本研究では， tune パッケージ を利用して事前にチューニングした[^XGBHyperparameters]．
+XGBoost のモデルにデータを投入する際は，事前に数値型の計画行列に変換したうえで， `xgb.DMatrix()` 関数を用いてデータを変換する必要がある．またそのさい，すべての行で同じ数値となっている列が存在するとエラーになってしまうため，それを取り除いておく．
 `}{`{=latex}
-The parameter settings passed to `xgb.cv()` and related functions are configured as follows. Setting `objective = "reg:logistic"` specifies a logistic objective with probability output. To control overfitting, `eval_metric = "logloss"` is used for cross-validation stopping criteria. Hyperparameters (such as maximum depth and learning rate) are tuned in advance using the `tune` package[^XGBHyperparameters]. 
+Before feeding data into XGBoost, features must be encoded into a numeric design matrix and converted using `xgb.DMatrix()`. Additionally, columns with constant values across all rows must be removed to prevent training errors.
 `}\end{Translate}`{=latex}
-
-
-[^XGBHyperparameters]: `\translateI{`{=latex}learning rate は0.02に固定した．その他のハイパーパラメータは，2005年から2007年の学習データを用いた4分割交差検証によって一度だけ調整され，ローリングウィンドウ全体を通じて固定した．一方，ブースティングの反復回数は，各ウィンドウについて，そのウィンドウに対応する学習データ内での4分割交差検証により個別に決定した．`}{`{=latex}The learning rate was fixed at 0.02. The other hyperparameters were tuned once using four-fold cross-validation on the 2005–2007 training data and then held fixed across rolling windows, while the number of boosting rounds was selected separately for each window by four-fold cross-validation within the corresponding training data.`}`{=latex}
 
 
 
 ```{r xgb_get_mm}
-library(xgboost)
 get_mm <- function(df){
   df <- df %>%
     select(setdiff(names(df),c(
@@ -643,6 +634,16 @@ dm_train_2006 <- xgb.DMatrix(
   label = df_train_2006 %>% pull(lapse_rate),
   weight = df_train_2006 %>% pull(exposure))
 ```
+
+
+`\begin{Translate}{`{=latex}
+`xgb.cv()` 関数などのパラメータ `params` に与えるパラメータについては次のとおりである．パラメータ `objective`に `"reg:logistic"` を指定し，ロジスティック損失関数を objective として確率を出力させる．また，過学習防止のために木の複雑さを設定する必要がある．その交差検証での判定基準として，パラメータ `eval_metric` を `"logloss"` に指定する．加えて，ハイパーパラメータを設定する．本研究では， tune パッケージ を利用して事前にチューニングした[^XGBHyperparameters]．
+`}{`{=latex}
+The configuration passed to `xgb.cv()` and `xgb.train()` is specified as follows. Setting `objective = "reg:logistic"` specifies a logistic loss function that outputs predicted probabilities. To prevent overfitting, `eval_metric = "logloss"` is used as the cross-validation stopping criterion. Other hyperparameters were tuned in advance using Bayesian optimization via the `tune` package [^XGBHyperparameters].
+`}\end{Translate}`{=latex}
+
+
+[^XGBHyperparameters]: `\translateI{`{=latex}learning rate は0.02に固定した．その他のハイパーパラメータは，2005年から2007年の学習データを用いた4分割交差検証によって一度だけ調整され，ローリングウィンドウ全体を通じて固定した．一方，ブースティングの反復回数は，各ウィンドウについて，そのウィンドウに対応する学習データ内での4分割交差検証により個別に決定した．`}{`{=latex}The learning rate was fixed at 0.02. The other hyperparameters were tuned once using four-fold cross-validation on the 2005–2007 training data and then held fixed across rolling windows, while the number of boosting rounds was selected separately for each window by four-fold cross-validation within the corresponding training data.`}`{=latex}
 
 
 ```{r xgb_params_xgb}
@@ -699,24 +700,24 @@ model_xgboost_2006 <- xgb.train(data = dm_train_2006, nrounds = nrounds,
 `\begin{Translate}{`{=latex}
 この XGBoost が GLM よりも精度の高いモデルであることは別途検証が必要であるが，ここでは記載を省略する．
 `}{`{=latex}
-
+A formal comparison confirming that XGBoost outperforms the baseline GLM is provided in Section 3.
 `}\end{Translate}`{=latex}
 
-## Improved GLM {#sec-CaseStudy_ImprovedGLM}
+## Baseline GLM / Improved GLM {#sec-CaseStudy_ImprovedGLM}
 
 `\begin{Translate}{`{=latex}
-ここまでで構築した XGBoost の予測結果を MID を用いて観察し，観察結果を参考にして GLM を改良する．以下では， @sec-CaseStudy_SOA で構築した，意図的に`face_amount`を除外したモデル（ **reduced baseline GLM**）を改良の出発点とする．`}{`{=latex}
-English Here
+ここまでで構築した XGBoost の予測結果を MID を用いて観察し，観察結果を参考にして GLM を改良する．以下では， @sec-CaseStudy_SOA で構築した，意図的に`face_amount`を除外したモデル（ **Reduced Baseline GLM**）を改良の出発点とする．`}{`{=latex}
+Using MID, we analyze the predictions of the trained XGBoost model and use the resulting insights to systematically refine the GLM. Hereafter, the Reduced Baseline GLM constructed in @sec-CaseStudy_SOA—with `face_amount` intentionally excluded—serves as our starting point.
 `}\end{Translate}`{=latex}
 
 `\begin{Translate}{`{=latex}
 つづく節では，改良の手順の一部をコード例を示しながら説明する．
 `}{`{=latex}
-English Here
+The following sections illustrate representative refinement steps alongside executable code examples.
 `}\end{Translate}`{=latex}
 
 
-### Functional Decomposition and Feature Importance
+### `\translateI{`{=latex}関数分解と特徴量重要度`}{`{=latex}Functional Decomposition and Feature Importance`}`{=latex}
 
 `\begin{Translate}{`{=latex}
 関数分解を行うモデルの対象となるデータを用意する．ここで，本研究では検証年度に応じて複数のモデルを構築しているが，MID を観察するモデルは2004-2006保険年度で学習したモデルとし，関数分解に用いるインスタンスも，その学習データとする．これは，SOAのGLMとXGBoostの間の予測の差が一定程度大きく，かつ解約の予測が外れやすい時期にはまだ差し掛かっていないことによる[^ForPerformanceDetail]．
@@ -724,14 +725,13 @@ English Here
 We prepare the dataset for performing functional decomposition. While multiple models are trained across different time windows in this study, MID inspection is conducted on the model trained on the 2004–2006 policy years. This window is selected because the prediction gap between GLM and XGBoost is sufficiently pronounced without yet being confounded by extreme market shifts [^ForPerformanceDetail].
 `}\end{Translate}`{=latex}
 
-[^ForPerformanceDetail]: `\translateI{`{=latex}元論文に記載する EV 変動要因分析による前提実績差異を確認すると， 2008 保険年度以降は XGBoost でも差異が大きくなっており，将来に向かっての解約の予測が困難であることを示唆している．`}{`{=latex}<Need to modify translation> As shown in xxx, 
-experience variances increase substantially in magnitude across all models from the 2008 policy year onward, reflecting heightened forecasting difficulty during the financial crisis.`}`{=latex}
+[^ForPerformanceDetail]: `\translateI{`{=latex}元論文に記載する EV 変動要因分析による前提実績差異を確認すると， 2008 保険年度以降は XGBoost でも差異が大きくなっており，将来に向かっての解約の予測が困難であることを示唆している．`}{`{=latex}As discussed in the original paper, experience variances increase substantially in magnitude across all models from the 2008 policy year onward, reflecting heightened forecasting difficulty during the financial crisis.`}`{=latex}
 
 
 `\begin{Translate}{`{=latex}
 重みを指定するためのデータや，予測に使用する XGBoost モデル固有の関数(`pred.fun`)を用意する必要があるので，それをここで定義する．
 `}{`{=latex}
-English Here
+We define the exposure weights and a custom prediction function (`pred.fun`) tailored to XGBoost, both of which are required by the `midr` package.
 `}\end{Translate}`{=latex}
 
 ```{r mod_df_prep}
@@ -790,7 +790,7 @@ mid_xgb <- midr::interpret(
 `\begin{Translate}{`{=latex}
 可視化のステップに入る前に，見た目を整えるために，幾つかの準備を行う．これは分析上必須ではない．
 `}{`{=latex}
-
+Before plotting, we configure custom ggplot themes and utility functions to enhance chart aesthetics. These settings are optional for analytical execution.
 `}\end{Translate}`{=latex}
 
 ```{r mid_theme}
@@ -829,7 +829,7 @@ mid_xgb %>% midr::mid.importance(
 ```
 
 `\begin{Translate}{`{=latex}
-関数分解を行う対象をベースラインの GLM と XGBoost の予測値の差に変更することで，両者の予測の差異がどの説明変数に関係して現れるのかを可視化することもできる．結果は @fig-mod_importance_diff のとおり．
+関数分解を行う対象を Reduced Baseline GLM と XGBoost の予測値の差に変更することで，両者の予測の差異がどの説明変数に関係して現れるのかを可視化することもできる．結果は @fig-mod_importance_diff のとおり．
 `}{`{=latex}
 By changing the decomposition target to the prediction difference between the reduced baseline GLM and XGBoost, we can directly visualize which features drive the discrepancies between the two models. The resulting importance plot for the difference model is shown in @fig-mod_importance_diff.
 `}\end{Translate}`{=latex}
@@ -846,10 +846,10 @@ fn_logit <- function(p){log(p/(1-p))} # link function
 fn_expit <- function(x){1/(1+exp(-x))} # inverse of the link function
 
 # pred.fun for the SOA GLM model
-predfun_soa_2006 <- function(model, newdata){
+predfun_soared_2006 <- function(model, newdata){
   predict(model,
-          newdata %>% mutate(lapse = 0) %>% #prevent error in prepfun_soa_xy
-          prepfun_soa_xy %>% prepfun_soa_xy_test_2006,
+          newdata %>% mutate(lapse = 0) %>% #prevent error in prepfun_soared_xy
+          prepfun_soared_xy %>% prepfun_soared_xy_test_2006,
           type = c("response"))
 }
 # pred.fun for "difference" models
@@ -862,9 +862,9 @@ predfun_diff <- function(model, newdata){
 # Create the "difference" model
 model_diff <- list()
 model_diff$model_xgb <- model_xgboost_2006
-model_diff$model_glm <- model_soa_2006
+model_diff$model_glm <- model_soared_2006
 model_diff$predfun_xgb <- predfun_xgb
-model_diff$predfun_glm <- predfun_soa_2006
+model_diff$predfun_glm <- predfun_soared_2006
 
 # Execute midr::interpret for the "difference" model
 mid_diff <- midr::interpret(
@@ -894,10 +894,10 @@ add_label_tmp <- add_label(data.frame(
 fn_logit <- function(p){log(p/(1-p))} #link function
 fn_expit <- function(x){1/(1+exp(-x))} #inverse of the link function
 #pred.fun for the SOA GLM model
-predfun_soa_2006 <- function(model, newdata){
+predfun_soared_2006 <- function(model, newdata){
   predict(model,
-          newdata %>% mutate(lapse = 0) %>% #prevent error in prepfun_soa_xy
-          prepfun_soa_xy %>% prepfun_soa_xy_test_2006,
+          newdata %>% mutate(lapse = 0) %>% #prevent error in prepfun_soared_xy
+          prepfun_soared_xy %>% prepfun_soared_xy_test_2006,
           type = c("response"))
 }
 #pred.fun for "difference" models
@@ -910,9 +910,9 @@ predfun_diff <- function(model, newdata){
 # Create the "difference" model
 model_diff <- list()
 model_diff$model_xgb <- model_xgboost_2006
-model_diff$model_glm <- model_soa_2006
+model_diff$model_glm <- model_soared_2006
 model_diff$predfun_xgb <- predfun_xgb
-model_diff$predfun_glm <- predfun_soa_2006
+model_diff$predfun_glm <- predfun_soared_2006
 
 # execute midr::interpret for the "difference" model
 if(SETTING_FIT_MODELS_INST){
@@ -1054,7 +1054,7 @@ mid_diff_d10ART %>% midr::mid.importance(
 
 
 
-### Model Refinements {#sec-CaseStudy_ImprovedGLM_Refinements}
+### `\translateI{`{=latex}モデル改良`}{`{=latex}Model Refinements`}`{=latex} {#sec-CaseStudy_ImprovedGLM_Refinements}
 
 `\begin{Translate}{`{=latex}
 GLM と XGBoost の予測結果の差を関数分解して得られる特徴量重要度の図， すなわち @fig-mod_importance_diff と @fig-mod_importance_filtered-2 を確認し，差異が大きいと考えられる説明変数に着目して分析を行う．
@@ -1063,7 +1063,7 @@ We examine the difference importance plots (@fig-mod_importance_diff and @fig-mo
 `}\end{Translate}`{=latex}
 
 `\begin{Translate}{`{=latex}
-なお，差が大きい説明変数全てで， GLM のモデルの改良点が見つかるとは限らない．たとえば，@fig-mod_importance_diff の X によると，`post_level_premium_structure` の主効果で差異が大きいという表示があるが，GLM はこの説明変数で層化されており，この主効果の差をモデルに明示的に反映することは出来ない．またたとえば，@fig-mod_importance_filtered-2 の Y によると，`premium_jump_ratio` の主効果で差異が大きいという表示がある．reduced baseline GLM ではこの説明変数についてビニングの上でダミー変数化している．そのビニング方法の調節が考えられる程度で，関数分解の形からモデル改善に有用な直接的な示唆を得るのは難しいと考えられる．
+なお，差が大きい説明変数全てで， GLM のモデルの改良点が見つかるとは限らない．たとえば，@fig-mod_importance_diff の X によると，`post_level_premium_structure` の主効果で差異が大きいという表示があるが，GLM はこの説明変数で層化されており，この主効果の差をモデルに明示的に反映することは出来ない．またたとえば，@fig-mod_importance_filtered-2 の Y によると，`premium_jump_ratio` の主効果で差異が大きいという表示がある．Reduced Baseline GLM ではこの説明変数についてビニングの上でダミー変数化している．そのビニング方法の調節が考えられる程度で，関数分解の形からモデル改善に有用な直接的な示唆を得るのは難しいと考えられる．
 `}{`{=latex}
 Not all discrepancies lead directly to actionable GLM modifications. For instance, point X in @fig-mod_importance_diff indicates a discrepancy in `post_level_premium_structure`, but since the GLM is already stratified by this factor, main effect modifications cannot be explicitly added. Similarly, point Y in @fig-mod_importance_filtered-2 indicates a discrepancy in `premium_jump_ratio`, which is already binned into dummy variables in the reduced baseline GLM.
 `}\end{Translate}`{=latex}
@@ -1075,15 +1075,15 @@ Excluding these cases, we evaluate the high-discrepancy components in order of m
 `}\end{Translate}`{=latex}
 
 `\begin{Translate}{`{=latex}
-本文では，冒頭の3項目について改良手順を述べる．他の詳細は本ドキュメントでは割愛する．
+本ドキュメントでは，冒頭の3項目について改良手順を述べる．他の詳細（I-4以降）は割愛する．
 `}{`{=latex}
-English Here
+In this tutorial, we detail the refinement workflow for the first three items (I-1 to I-3). The remaining items (I-4 to I-10) are omitted here for brevity.
 `}\end{Translate}`{=latex}
 
-### I-1: Main Effect of `face_amount` {.unnumbered}
+#### I-1: `\translateI{`{=latex}\texttt{face\_amount} の主効果`}{`{=latex}Main Effect of \texttt{face\_amount} `}`{=latex} {.unnumbered}
 
 `\begin{Translate}{`{=latex}
-@fig-mod_importance_filtered-2 の B-1 によると，`face_amount` の主効果で差異が大きいという表示がある．この説明変数は reduced baseline GLM  では採用されていないが，この図からは解約率との何らかの関係性が示唆される．そこで，XGBoost の予測値の関数分解で得られた関数を確認する．
+@fig-mod_importance_filtered-2 の B-1 によると，`face_amount` の主効果で差異が大きいという表示がある．この説明変数は Reduced Baseline GLM  では採用されていないが，この図からは解約率との何らかの関係性が示唆される．そこで，XGBoost の予測値の関数分解で得られた関数を確認する．
 `}{`{=latex}
 Point B-1 in @fig-mod_importance_filtered-2 highlights a prominent discrepancy in the main effect of `face_amount`. While omitted in our reduced baseline GLM, MID indicates its strong influence on lapse predictions.
 `}\end{Translate}`{=latex}
@@ -1091,7 +1091,7 @@ Point B-1 in @fig-mod_importance_filtered-2 highlights a prominent discrepancy i
 `\begin{Translate}{`{=latex}
 関数分解で得られた関数をプロットするには，`midr::ggmid()` 関数を使用する．
 `}{`{=latex}
-English here.
+To plot the function terms obtained from functional decomposition, we use the `midr::ggmid()` function.
 `}\end{Translate}`{=latex}
 
 `\begin{Translate}{`{=latex}
@@ -1126,11 +1126,11 @@ mid_xgb %>% midr::ggmid(data = df_train_2006_xw %>% sample_n(500),
 `\begin{Translate}{`{=latex}
 @fig-mod_i1_int により，`duration <= 9` では高額契約ほど解約率が低く，`duration >= 10` ではその逆であることがわかる．GLM に説明変数として `face_amount` を追加することで，精度改善に貢献するものと考えられる．
 `}{`{=latex}
-English here.
+@fig-mod_i1_int indicates that for early durations (`duration <= 9`), higher face amounts correlate with lower lapse rates, whereas the relationship reverses at duration 10 and beyond. Adding `face_amount` as a predictor back into the GLM is expected to improve predictive performance.
 `}\end{Translate}`{=latex}
 
 
-### I-2: Main Effect of `risk_class` {.unnumbered}
+#### I-2: `\translateI{`{=latex}\texttt{risk\_class} の主効果`}{`{=latex}Main Effect of \texttt{risk\_class}`}`{=latex} {.unnumbered}
 
 
 ```{r fig-mod_i2_i3, fig.width = 6, fig.height = 4}
@@ -1158,8 +1158,7 @@ Points A-2 (@fig-mod_importance_diff) and B-2 (@fig-mod_importance_filtered-2) h
 [^MOD_#I-2_Detail]: `\translateI{`{=latex}実際は，層化によって各層の学習データが小さくなっており，対象の level に属するデータが非常に少ないと過学習に陥る．予測精度を向上させるため，一定程度の規模がある場合のみ区分することとした．区分の判断基準は次のとおりで，閾値は予測精度が向上するかによって決定した． (i) If `"Super-Pref NS"` is smaller than 50, then merge `"Super-Pref NS"` and `"NS"`. (ii) If `"Undiff NS"` or NS is smaller than 700, then merge `"Undiff NS"` and `"NS"`. (iii) If `"Agg/Unknown"` is smaller than 100, then merge `"Undiff SM"` and `"Agg/Unknown"`. (iv) If `"SM"` is smaller than 700, then merge `"Undiff SM"` and `"SM"`.`}{`{=latex}To avoid overfitting in small strata, collapsing rules are applied based on sample counts: (i) Merge `"Super-Pref NS"` with `"NS"` if count < 50; (ii) Merge `"Undiff NS"` and `"NS"` if either count < 700; (iii) Merge `"Agg/Unknown"` with `"Undiff SM"` if count < 100; (iv) Merge `"SM"` with `"Undiff SM" ` if count < 700.`}`{=latex}
 
 
-### I-3: Interaction between `premium_mode` and `premium_jump_ratio` {.unnumbered}
-
+#### I-3: `\translateI{`{=latex}\texttt{premium\_mode} と \texttt{premium\_jump\_ratio} の交互作用`}{`{=latex}Interaction between \texttt{premium\_mode} and \texttt{premium\_jump\_ratio}`}`{=latex} {.unnumbered}
 
 `\begin{Translate}{`{=latex}
 @fig-mod_importance_diff の A-3 および @fig-mod_importance_filtered-2 の B-3 によると，`premium_mode` と `premium_jump_ratio` の交互作用で差異が大きいという表示がある．この交互作用の確認の前に，`premium_mode` の主効果について検討するため，`risk_class` と `duration` の2変数を組み合わせた効果を可視化すると @fig-mod_i2_i3-2 のとおり．GLM は `"Semiannual"`，`"Quarterly"` を統合してひとつの level としていたが，実際は解約率に差が認められるため，これらを分離する変更を採用する．一方，`"Biweekly"` は `"Monthly"` と同じ区分となっているが，群団として非常に小さいため区分の分離は行わない．
@@ -1176,7 +1175,7 @@ Next, to examine the interaction between `premium_mode` and `premium_jump_ratio`
 `\begin{Translate}{`{=latex}
 グラフに主効果を加算するかどうかは，引数 `main.effects` によって制御できる．
 `}{`{=latex}
-English Here.
+Whether to add the main effects to the interaction plot can be controlled via the `main.effects` argument in `ggmid()`.
 `}\end{Translate}`{=latex}
 
 
@@ -1201,19 +1200,21 @@ mid_xgb_d10ART %>% midr::ggmid(data = df_train_2006_xw %>% sample_n(500),
 As indicated in Figure 7b, for the `"Quarterly"` mode, the relationship where higher `premium_jump_ratio` leads to higher lapse rates is substantially weakened. Therefore, we adopt a modification adding an interaction term between `premium_mode` and `premium_jump_ratio` exclusively when `duration == 10` and `premium_mode == "Quarterly"`.
 `}\end{Translate}`{=latex}
 
-[^MOD_#I-3_Detail]: `\translateI{`{=latex}関数項が過度に複雑にならないよう，この交互作用項では `premium_jump_ratio` のビニングを `breaks = c(0,1,2,5,99)` とする．また，学習データに実在データが無いビンでの予測が必要な場合，学習データがある最も近い `premium_jump_ratio` のビンに振り分ける．その際，より高いビンがあればそちらを，そうでなければより低いビンを採用する．`}{`{=latex}To prevent excessive model complexity, coarse binning (`breaks = c(0,1,2,5,99)`) is applied to `premium_jump_ratio` for this specific interaction term. If a prediction is required for a bin that lacks observed data in the training set, it is remapped to the nearest bin containing observed data, prioritizing a higher bin if available, or a lower bin otherwise.`}`{=latex}
+[^MOD_#I-3_Detail]: `\translateI{`{=latex}関数項が過度に複雑にならないよう，この交互作用項では `premium_jump_ratio` のビニングを `breaks = c(0,1,2,5,99)` とする．また，学習データに実在データが無いビンでの予測が必要な場合，学習データがある最も近い `premium_jump_ratio` のビンに振り分ける．そのさい，より高いビンがあればそちらを，そうでなければより低いビンを採用する．`}{`{=latex}To prevent excessive model complexity, coarse binning (`breaks = c(0,1,2,5,99)`) is applied to `premium_jump_ratio` for this specific interaction term. If a prediction is required for a bin that lacks observed data in the training set, it is remapped to the nearest bin containing observed data, prioritizing a higher bin if available, or a lower bin otherwise.`}`{=latex}
 
-### モデル構築
+### `\translateI{`{=latex}モデル構築`}{`{=latex}Fitting Refined Models`}`{=latex}
+
+#### `\translateI{`{=latex}Baseline GLM の構築`}{`{=latex}Fitting Baseline GLM`}`{=latex}
 
 `\begin{Translate}{`{=latex}
-修正 I-1 により `face_amount` を復元した「**baseline GLM** 」，つまり SOA が構築したものと同等のモデルを次のとおり構築する．前処理のための関数をごく一部修正するだけでよい．
+修正 I-1 により `face_amount` を復元した「**Baseline GLM** 」，つまり SOA が構築したものと同等のモデルを次のとおり構築する．前処理のための関数をごく一部修正するだけでよい．
 `}{`{=latex}
-English Here.
+We construct the Baseline GLM—which restores `face_amount` per modification Item I-1 and replicates the original SOA model—by applying minor modifications to the preprocessing function.
 `}\end{Translate}`{=latex}
 
 
-```{r prepfun_modi1_xy}
-prepfun_modi1_xy <- function(df_tmp){
+```{r prepfun_soa_xy}
+prepfun_soa_xy <- function(df_tmp){
   df_tmp %>% prep_toint_age %>% prep_toint_pjratio %>%
     mutate(
       issue_age_sq = issue_age^2, issue_age_log = log(issue_age),
@@ -1235,37 +1236,39 @@ prepfun_modi1_xy <- function(df_tmp){
 }
 ```
 
-```{r model_modi1_2006_code, eval=FALSE}
-df_train_2006_modi1 <- df_train_2006 %>% prepfun_modi1_xy
-df_test_2006_modi1 <- df_test_2006 %>% prepfun_modi1_xy
+```{r model_soa_2006_code, eval=FALSE}
+df_train_2006_soa <- df_train_2006 %>% prepfun_soa_xy
+df_test_2006_soa <- df_test_2006 %>% prepfun_soa_xy
 
-model_modi1_2006 <- glm(
+model_soa_2006 <- glm(
   cbind(lapse, exposure - lapse) ~
     (. + premium_jump_ratio_group * issue_age - 1) : duration : post_level_premium_structure,
   family = quasibinomial(), 
-  data = df_train_2006_modi1)
+  data = df_train_2006_soa)
 ```
 
 
-```{r model_modi1_2006, include=FALSE}
-df_train_2006_modi1 <- df_train_2006 %>% prepfun_modi1_xy
-df_test_2006_modi1 <- df_test_2006 %>% prepfun_modi1_xy
+```{r model_soa_2006, include=FALSE}
+df_train_2006_soa <- df_train_2006 %>% prepfun_soa_xy
+df_test_2006_soa <- df_test_2006 %>% prepfun_soa_xy
 
 if(SETTING_FIT_MODELS_INST){
-model_modi1_2006 <- glm(
+model_soa_2006 <- glm(
   cbind(lapse, exposure - lapse) ~
     (. + premium_jump_ratio_group * issue_age - 1) : duration : post_level_premium_structure,
   family = quasibinomial(), 
-  data = df_train_2006_modi1)
+  data = df_train_2006_soa)
 }
 ```
 
 
+#### `\translateI{`{=latex}Improved GLM の構築`}{`{=latex}Fitting Improved GLM`}`{=latex}
+
 
 `\begin{Translate}{`{=latex}
-さらに，元論文における10個の改良を全て施したモデルの構築方法は次のとおり．改良の大部分は，前処理のための関数の中に実装される．
+元論文における10個の改良を全て施したモデル「**Improved GLM**」の構築方法は次のとおり．改良の大部分は，前処理のための関数の中に実装される．
 `}{`{=latex}
-English Here.
+The Improved GLM incorporating all ten refinement items identified in the original paper is constructed as follows. Most enhancements are embedded directly into the preprocessing pipeline.
 `}\end{Translate}`{=latex}
 
 
@@ -1365,7 +1368,7 @@ prepfun_mod_xy <- function(df_tmp){
 `\begin{Translate}{`{=latex}
 モデル構築のステップでは，いくつかの交互作用項を明示的に追加するのみである．前処理で追加された説明変数は formula の `.` 指定で自動的にモデルに追加される．
 `}{`{=latex}
-English Here.
+In the model-fitting step, only targeted interaction terms need to be explicitly specified in the formula; newly engineered features are automatically included via the dot (`.`) syntax.
 `}\end{Translate}`{=latex}
 
 ```{r model_mod_2006_code, eval=FALSE}
@@ -1407,7 +1410,7 @@ model_mod_2006 <- glm(
 
 ```{r save_models, echo=FALSE}
 if(SETTING_FIT_MODELS_INST){
-  save(model_soa_2006, model_xgboost_2006, model_mod_2006, model_modi1_2006, 
+  save(model_soared_2006, model_xgboost_2006, model_mod_2006, model_soa_2006, 
        mid_xgb, mid_diff, 
        mid_xgb_d10ART, mid_diff_d10ART,
        file = SETTING_FNAME_MODELS_INST_BASIC)
@@ -1420,48 +1423,48 @@ update_geom_defaults("point", NULL)
 ```
 
 
-# Statistical Predictive Performance
+# `\translateI{`{=latex}統計学的精度評価`}{`{=latex}Statistical Predictive Performance`}`{=latex}
 
 ## Reduced Baseline GLM
 
 `\begin{Translate}{`{=latex}
-Reduced Baseline GLM のスコアは次のとおり．関数 `calc_logloss()` の引数 `mean` を `FALSE` とした場合は Log-loss の総和が， `TRUE` とした場合は加重平均値が出力される．元論文の I-1 の節で表示した数値がここで再現される．
+Reduced Baseline GLM の評価指標は次のとおり．関数 `calc_logloss()` の引数 `mean` を `FALSE` とした場合は Log-loss の総和が， `TRUE` とした場合は加重平均値が出力される．
 `}{`{=latex}
-English Here.
+The evaluation metrics for the Reduced Baseline GLM are calculated as follows. Passing `mean = FALSE` to `calc_logloss()` outputs total weighted Log-loss, while `mean = TRUE` outputs the weighted average.
 `}\end{Translate}`{=latex}
 
 
-```{r model_soa_2006_score}
-pred_soa <- model_soa_2006 %>%
-  predict(df_test_2006_soa %>% prepfun_soa_xy_test_2006, type = c("response"))
+```{r model_soared_2006_score}
+pred_soared <- model_soared_2006 %>%
+  predict(df_test_2006_soared %>% prepfun_soared_xy_test_2006, type = c("response"))
 
 calc_logloss(
-  pred_soa,
+  pred_soared,
   df_test_2006 %>% pull(lapse_rate),
   df_test_2006 %>% pull(exposure),
   mean = TRUE
 )#0.2988156
 
 calc_logloss(
-  pred_soa,
+  pred_soared,
   df_test_2006 %>% pull(lapse_rate),
   df_test_2006 %>% pull(exposure),
   mean = FALSE
 )#238153.1
 
 calc_auc(
-  pred_soa,
+  pred_soared,
   df_test_2006 %>% pull(lapse_rate),
   df_test_2006 %>% pull(exposure)
 )#0.8065347
 ```
 
-## XGBoost Model
+## `\translateI{`{=latex}XGBoost モデル`}{`{=latex}XGBoost Model`}`{=latex}
 
 `\begin{Translate}{`{=latex}
-XGBoost のスコアは次のとおり．元論文の Statistical Predictive Performance の節で示した数値（Validation Year は 2007）が再現される．
+XGBoost の評価指標は次のとおり．元論文の Statistical Predictive Performance の節で示した数値（Validation Year は 2007）が再現される．
 `}{`{=latex}
-English Here.
+The evaluation metrics for XGBoost are shown below, successfully replicating the figures reported in the original paper (for validation year 2007).
 `}\end{Translate}`{=latex}
 
 ```{r model_xgb_2006_score}
@@ -1495,31 +1498,31 @@ calc_auc(
 
 
 `\begin{Translate}{`{=latex}
-XGBoost のスコアは次のとおり．@sec-CaseStudy_SOA で注意したように，元論文の Statistical Predictive Performance の節で示した数値からは，Log-loss で僅かにずれが生じる．
+Baseline GLM の評価指標は次のとおり．@sec-CaseStudy_SOA で注意したように，元論文の Statistical Predictive Performance の節で示した数値からは，Log-loss で僅かにずれが生じる．
 `}{`{=latex}
-English Here.
+The evaluation metrics for the Baseline GLM are shown below. As noted in @sec-CaseStudy_SOA, a slight numerical difference in Log-loss arises relative to the paper due to single-model versus multi-strata implementation.
 `}\end{Translate}`{=latex}
 
-```{r model_modi1_2006_score}
-pred_modi1 <- model_modi1_2006 %>%
-  predict(df_test_2006_modi1 %>% prepfun_soa_xy_test_2006, type = c("response"))
+```{r model_soa_2006_score}
+pred_soa <- model_soa_2006 %>%
+  predict(df_test_2006_soa %>% prepfun_soared_xy_test_2006, type = c("response"))
 
 calc_logloss(
-  pred_modi1,
+  pred_soa,
   df_test_2006 %>% pull(lapse_rate),
   df_test_2006 %>% pull(exposure),
   mean = TRUE
 )#0.2984396
 
 calc_logloss(
-  pred_modi1,
+  pred_soa,
   df_test_2006 %>% pull(lapse_rate),
   df_test_2006 %>% pull(exposure),
   mean = FALSE
 )#237853.5
 
 calc_auc(
-  pred_modi1,
+  pred_soa,
   df_test_2006 %>% pull(lapse_rate),
   df_test_2006 %>% pull(exposure)
 )#0.8073218
@@ -1530,15 +1533,15 @@ calc_auc(
 
 
 `\begin{Translate}{`{=latex}
-XGBoost のスコアは次のとおり．@sec-CaseStudy_SOA で注意したように，元論文の Statistical Predictive Performance の節で示した数値からは，Log-loss で僅かにずれが生じる．なお，Baseline GLM と比べて Log-loss ではわずかに悪化している点は元論文と同様である．
+Improved GLM の評価指標は次のとおり．@sec-CaseStudy_SOA で注意したように，元論文の Statistical Predictive Performance の節で示した数値からは，Log-loss で僅かにずれが生じる．なお，Baseline GLM と比べて Log-loss ではわずかに悪化している点は元論文と同様である．
 `}{`{=latex}
-English Here.
+The evaluation metrics for the Improved GLM are shown below. As with the baseline model, Log-loss exhibits a minor numerical shift from the paper. Consistent with the paper's findings, Log-loss shows a slight degradation relative to the Baseline GLM in this particular validation year, while AUC shows noticeable improvement.
 `}\end{Translate}`{=latex}
 
 
 ```{r model_mod_2006_score}
 pred_mod <- model_mod_2006 %>%
-  predict(df_test_2006_mod %>% prepfun_soa_xy_test_2006, type = c("response"))
+  predict(df_test_2006_mod %>% prepfun_soared_xy_test_2006, type = c("response"))
 
 calc_logloss(
   pred_mod,

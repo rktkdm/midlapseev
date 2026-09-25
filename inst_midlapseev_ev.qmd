@@ -1,0 +1,1146 @@
+---
+title: "\\translate{MID を使用した解約率予測 GLM の改良 - EV計算編}{Enhancing GLM-Based Lapse Rate Models Using MID - EV Valuation Tutorial}"
+author:
+  - Reiji Kozuma\thanks{Daido Life Insurance Company, \texttt{rktkdm@gmail.com}}
+  - Ryoichi Asashiba\thanks{Daido Life Insurance Company, \texttt{ryoichi.asashiba@gmail.com}}
+  - Yoshihiro Matsumori\thanks{Sompo Japan Insurance Inc., \texttt{ymatsumori1@sompo-japan.co.jp}}
+  - Hirokazu Iwasawa\thanks{Graduate School of Accountancy, Waseda University, \texttt{iwahiro@bb.mbn.or.jp}}
+date: "`r Sys.Date()`"
+format:
+  pdf:
+    pdf-engine: xelatex
+    documentclass: bxjsarticle
+    classoption: xelatex,ja=standard,base=10pt
+#    toc: true
+#    toc-title: "Table of contents"
+#    toc-depth: 4
+    number-sections: true
+    fig-width: 6
+    fig-height: 4
+    link-citations: true
+    include-in-header:
+      - text: |
+          %%% 2. フォント・文字設定
+          \setmathfont{Latin Modern Math}
+          \setmathfont{TeX Gyre Pagella Math}[range=bb]
+          %%% 3. レイアウト・段落・見出し設定
+          \makeatletter
+          \setlength{\parindent}{15pt} % 変更（括弧内の数値がゼロのときは字下げなしになるが，1pt以上とすると見た目が変わらず，その原因を理解できていない）
+          \setlength{\parskip}{0pt} % 変更（これがとても大きい）
+          % 見出し（# 〜 #####）の余白・改行を一括調整
+          % 各階層の見出し余白調整（バランスよく余裕を持たせた設定）
+          % 各階層の見出し余白調整（上部の余白をさらに広げたゆったり版）
+          \renewcommand\section{\@startsection{section}{1}{\z@}%
+            {2.5ex \@plus.5ex \@minus.2ex}% <- 上の余白（旧: 1.8ex）約1.5行分
+            {0.8ex \@plus.2ex}%             <- 下の余白（変更なし）
+            {\normalfont\Large\bfseries}}
+          \renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
+            {2.0ex \@plus.3ex \@minus.2ex}% <- 上の余白（旧: 1.5ex）約1行強
+            {0.5ex \@plus.2ex}%             <- 下の余白（変更なし）
+            {\normalfont\large\bfseries}}
+          \renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}%
+            {1.6ex \@plus.3ex \@minus.2ex}% <- 上の余白（旧: 1.2ex）
+            {0.4ex \@plus.1ex}%             <- 下の余白（変更なし）
+            {\normalfont\normalsize\bfseries}}
+          \renewcommand\paragraph{\@startsection{paragraph}{4}{\z@}%
+            {1.4ex \@plus.2ex \@minus.2ex}% <- 上の余白（旧: 1.0ex）
+            {0.3ex \@plus.1ex}%             <- 下の余白（変更なし）
+            {\normalfont\normalsize\bfseries}}
+          \renewcommand\subparagraph{\@startsection{subparagraph}{5}{\z@}%
+            {1.2ex \@plus.2ex \@minus.2ex}% <- 上の余白（旧: 0.8ex）
+            {0.3ex \@plus.1ex}%             <- 下の余白（変更なし）
+            {\normalfont\normalsize\bfseries}}
+          %\usepackage{etoolbox}%上下の余白詰め
+          %\AtBeginEnvironment{Shaded}{%
+          %  \vspace{-0.5\baselineskip}
+          %}
+          %\AtEndEnvironment{Shaded}{%
+          %  \vspace{-0.5\baselineskip}
+          %}
+          \makeatother
+          \usepackage{tocloft} %% 目次の表示設定
+          \renewcommand{\cftdot}{} % 目次のリーダー（点線）を消去
+          %%以下は自動挿入?
+          % \setlength{\emergencystretch}{3em}
+          % \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+          %%% 4. 画像・図表関連
+          \usepackage{wrapfig}
+          \usepackage{pdfpages}
+          \usepackage{placeins}
+          %%% 5. テーブル関連
+          \usepackage{array}
+          %%% 6. コードブロック・シンタックスハイライト
+          \usepackage{fvextra}
+          \usepackage{mdframed}
+          %%コードブロックの表示設定
+          \newcommand{\CodeBlockSizeDefault}{\small}%コードブロックの文字サイズ \scriptsize < \footnotesize <\small
+          \newcommand{\CodeBlockSize}{\CodeBlockSizeDefault}
+          \newcommand{\CodeDefault}{\renewcommand{\CodeBlockSize}{\CodeBlockSizeDefault}}
+          \newcommand{\CodeSmall}{\renewcommand{\CodeBlockSize}{\small}}
+          \newcommand{\CodeFootnote}{\renewcommand{\CodeBlockSize}{\footnotesize}}
+          \newcommand{\CodeScript}{\renewcommand{\CodeBlockSize}{\scriptsize}}
+          \definecolor{codebg}{RGB}{248,248,248}%背景色
+          \renewenvironment{Shaded}%デフォルトの設定を削除
+            {}
+            {}
+          \BeforeBeginEnvironment{Shaded}{% %枠線の追加
+          \begin{mdframed}[
+            backgroundcolor=codebg,
+            linewidth=0.3pt,
+            roundcorner=2pt,
+            skipabove=3pt,
+            skipbelow=3pt]
+          }
+          \AfterEndEnvironment{Shaded}{%
+            \end{mdframed}
+            \par\vspace{8pt}% <- コードブロックの直後に強制的に8pt空ける
+          }
+          \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+            showspaces = false,
+            showtabs = false,
+            breaklines,
+            commandchars=\\\{\},
+            fontsize=\CodeBlockSize,
+            baselinestretch=0.96 %行間詰め
+          }
+          \DefineVerbatimEnvironment{verbatim}{Verbatim}{
+            showspaces = false,
+            showtabs = false,
+            breaklines,
+            commandchars=\\\{\}
+          }
+          %%% 7. 参考文献 (CSL References)
+          %% 参考文献一覧の文字サイズ
+          %\AtBeginEnvironment{CSLReferences}{
+          %  \scriptsize
+          %  \linespread{0.95}\selectfont
+          %}
+          %%% 8. 対訳・言語表示用カスタムマクロ
+          \usepackage{ifthen}
+          \newboolean{showLanguage}
+          \newboolean{showJapanese}
+          \newboolean{showEnglish}
+          \setboolean{showLanguage}{false}
+          \setboolean{showJapanese}{false}   % 日本語表示する場合 true
+          \setboolean{showEnglish}{true}    % 英語表示する場合 true
+          \newif\ifshowLanguageI
+          \newif\ifshowJapaneseI
+          \newif\ifshowEnglishI
+          \ifthenelse{\boolean{showLanguage}}{\showLanguageItrue}{\showLanguageIfalse}
+          \ifthenelse{\boolean{showJapanese}}{\showJapaneseItrue}{\showJapaneseIfalse}
+          \ifthenelse{\boolean{showEnglish}}{\showEnglishItrue}{\showEnglishIfalse}
+          \newcommand{\languageTag}[1]{\textbf{[#1]} }
+          \newcommand{\lnJA}{\languageTag{JA}}
+          \newcommand{\lnEN}{\languageTag{EN}}
+          \DeclareRobustCommand{\translateI}[2]{\ifshowJapaneseI \ifshowLanguageI \lnJA \fi #1 \fi \ifshowEnglishI \ifshowLanguageI \lnEN \fi #2 \fi}
+          %\newcommand{\translate}[2]{#1 (#2)}
+          %\newcommand{\translate}[2]{\ifthenelse{\boolean{showLanguage}}{#1}{} (#2)}
+          \newcommand{\translate}[2]{%
+            \ifthenelse{\boolean{showJapanese}}{\ifthenelse{\boolean{showLanguage}}{\lnJA}{}#1\\}{}%
+            \ifthenelse{\boolean{showEnglish}}{\ifthenelse{\boolean{showLanguage}}{\lnEN}{}#2\\}{}%
+          }
+          \newenvironment{Translate}[2]{%
+            \ifthenelse{\boolean{showJapanese}}{\ifthenelse{\boolean{showLanguage}}{\lnJA}{}#1\par}{}%
+            \ifthenelse{\boolean{showEnglish}}{\ifthenelse{\boolean{showLanguage}}{\lnEN}{}#2\par}{}%
+          }{}
+          \renewcommand{\abstractname}{\translateI{概要}{Abstract}}%
+          %%% 9. メタデータ・タイトル設定
+          % \maketitle の本来の動作を \oldmaketitle に退避
+          \let\oldmaketitle\maketitle
+          % 一時的に \maketitle を何もしない命令に上書き
+          \renewcommand{\maketitle}{}
+    include-before-body:
+      - text: |
+          % 1ページ目：表紙PDFを出力
+          %\includepdf[pages=1]{ICA2026 Paper Coversheet_MID_2611.pdf}
+          % 2ページ目冒頭：本来のタイトルブロック（\oldmaketitle）を出力
+          \oldmaketitle
+    keep-tex: true
+execute:
+  cache: true
+csl: apa.csl
+bibliography: papermidrreferences_2617.bib
+---
+
+
+
+```{r comment, include=FALSE, eval=FALSE}
+## 2026/9/25 rough draft
+```
+
+```{r setup_qmd_flg, include=FALSE, cache.rebuild=TRUE}
+SETTING_IS_ROOT_DOCUMENT <- !exists("FLG_IN_RENDERING") || !FLG_IN_RENDERING
+```
+
+```{r setup_qmd, include=FALSE, cache.rebuild=TRUE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+options(tibble.width = Inf, pillar.sigfig = 5)
+
+# install packages
+pkgs <- c("tidyverse", "readxl", "xgboost", "waterfalls") #midr
+for (pkg in pkgs) {
+  if (!(pkg %in% installed.packages())) {
+    install.packages(pkg)
+  }
+}
+
+# detach packages
+default <- c(".GlobalEnv", "tools:rstudio", "tools:vscode",
+             "package:stats", "package:graphics",
+             "package:grDevices", "package:utils",
+             "package:datasets", "package:methods",
+             "Autoloads", "package:base")
+for (pkg in setdiff(search(), default)) {
+  detach(pkg, character.only = TRUE)
+  }
+
+# clear objects
+remove(list=objects())
+```
+
+
+\pagenumbering{gobble}
+
+```{r setup_include_dependents, include=FALSE, cache.rebuild=TRUE}
+source("inst_midlapseev_common.R")
+SETTING_IS_ROOT_DOCUMENT <- FALSE
+doc_basic <- it.read('inst_midlapseev_basic.qmd')
+SETTING_IS_ROOT_DOCUMENT <- !exists("FLG_IN_RENDERING") || !FLG_IN_RENDERING
+```
+
+
+```{r setup_setting_fname, include=FALSE, cache.rebuild=TRUE}
+SETTING_FNAME_MODELS_INST_EV <- "models_inst_ev.RData" #SETTING_FIT_MODELS_INSTで省略した時の読み込み先
+SETTING_FIT_MODELS_INST <- FALSE#TRUE#
+```
+
+```{r model_load, include=FALSE, cache.rebuild=TRUE}
+if(!SETTING_FIT_MODELS_INST){
+  load(SETTING_FNAME_MODELS_INST_EV)
+}
+```
+
+```{r setup_include_dependents_extract, include=FALSE}
+it.extract(doc_basic, c("load_packages_inst_basic", "load_data", "data_prep",
+                        "prepfun_soa_xy_age", "xgb_params_xgb"))
+```
+
+
+`\begin{abstract}\begin{Translate}{`{=latex}
+本ドキュメントは，元論文 @KozumaICA2026 にかかる計算のうち，EVの計算について具体的なコードとともに説明を補足するものである．なお，元論文に述べた内容は議論の前提とする．
+`}{`{=latex}
+This document provides supplementary code and documentation for the Embedded Value (EV) calculations conducted in the original research paper [@KozumaICA2026]. The theoretical concepts and valuation frameworks introduced in the paper are assumed as background knowledge.
+`}\end{Translate}\end{abstract}`{=latex}
+
+
+```{=latex}
+\vspace{1em}
+\renewcommand{\contentsname}{\translateI{目次}{Table of Contents}}
+\tableofcontents
+\clearpage % 目次の後に改ページして本文（第1章）を開始
+```
+
+# `\translateI{`{=latex}準備`}{`{=latex}Preparation`}`{=latex}
+
+## `\translateI{`{=latex}パッケージとデータの準備`}{`{=latex}Preparing Packages and Data`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+本ドキュメントで使用するパッケージを読み込む．
+`}{`{=latex}
+Load the R packages required for EV modeling and visualization.
+`}\end{Translate}`{=latex}
+
+```{r load_packages_inst_ev, cache.rebuild=TRUE}
+library(midr)
+library(tidyverse)
+library(readxl)
+library(xgboost)
+library(waterfalls)
+```
+
+
+`\begin{Translate}{`{=latex}
+データの読み込みとその前処理は基本編と同一であるため，本ドキュメントでは記載を省略する．
+`}{`{=latex}
+Data loading and basic preprocessing are identical to the basic tutorial and are therefore omitted here.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+データフレームから必要な列のみを取り出す部分を関数化する．
+`}{`{=latex}
+We define helper functions to extract required predictor and target subsets from the dataset.
+`}\end{Translate}`{=latex}
+
+
+```{r fn_get_cols}
+# Convert to model matrix
+get_modelmatrix <- function(df){
+  df <- prep_toint_pjratio(df)
+  df <- model.matrix(~ ., df) # An intercept column of all 1s is included
+}
+get_xo <- function(df){ # All predictors and target variables
+  df %>% select(setdiff(names(df),
+                        c("ID", "lapse_study_year", "policy_year", "issue_year", "exposure_amount")))
+}
+get_x <- function(df){ # Predictors only
+  df <- df %>% get_xo
+  df <- df %>% select(setdiff(names(df), c("lapse", "exposure", "lapse_rate")))
+}
+```
+
+
+## `\translateI{`{=latex}XGBoost モデルの構築`}{`{=latex}Building XGBoost Models`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+基本編と同様の手順で，XGBoost の予測モデルを構築する．ハイパーパラメータも同一である．本ドキュメントでは評価年度 （Evaluation Year） 2002年度末から2003年度末へのEV変動要因分析を題材とするため，それぞれの時点で予測モデルを構築する必要がある．
+`}{`{=latex}
+We train XGBoost predictive models following the same procedure and hyperparameter settings as in the basic tutorial. Because this tutorial focuses on the EV Analysis of Movement (AoM) from year-end 2002 to year-end 2003 (evaluation year 2002), models corresponding to both opening and closing dates must be estimated.
+`}\end{Translate}`{=latex}
+
+
+```{r year_ev}
+year_start <- 2002
+year_end <- 2003
+df_train_start <- df_all %>%
+  filter(lapse_study_year >= year_start-2, lapse_study_year <= year_start)
+df_test_start <- df_all %>%
+  filter(lapse_study_year == year_start+1)
+df_train_end <- df_all %>%
+  filter(lapse_study_year >= year_end-2, lapse_study_year <= year_end)
+df_test_end <- df_all %>%
+  filter(lapse_study_year == year_end+1)
+```
+
+
+```{r xgb_get_mm}
+get_mm <- function(df){
+  df <- df %>%
+    select(setdiff(names(df),c(
+      "ID", "lapse_study_year", "policy_year", "issue_year",
+      "exposure_amount", "lapse", "exposure", "lapse_rate"))) %>%
+    prep_toint_pjratio
+  model.matrix(~ ., df)
+}
+df_train_start_mm <- df_train_start %>% get_mm
+constant_cols_start <- which(apply(df_train_start_mm, 2, function(col) all(col == col[1])))
+dm_train_start <- xgb.DMatrix(
+  data = df_train_start_mm[, -constant_cols_start, drop = FALSE],
+  label = df_train_start %>% pull(lapse_rate),
+  weight = df_train_start %>% pull(exposure))
+df_train_end_mm <- df_train_end %>% get_mm
+constant_cols_end <- which(apply(df_train_end_mm, 2, function(col) all(col == col[1])))
+dm_train_end <- xgb.DMatrix(
+  data = df_train_end_mm[, -constant_cols_end, drop = FALSE],
+  label = df_train_end %>% pull(lapse_rate),
+  weight = df_train_end %>% pull(exposure))
+```
+
+
+```{r xgb_model_xgboost_code, eval=FALSE}
+set.seed(2025)
+cv_xgboost_start <- xgb.cv(data = dm_train_start, nrounds = 2000, nfold = 4,
+                          early_stopping_rounds = 10, params = params_xgb, verbose = 0)
+nrounds <- cv_xgboost_start$early_stop$best_iteration
+
+set.seed(2025)
+model_xgboost_start_raw <- xgb.train(data = dm_train_start, nrounds = nrounds,  
+                                params = params_xgb)
+
+set.seed(2025)
+cv_xgboost_end <- xgb.cv(data = dm_train_end, nrounds = 2000, nfold = 4,
+                          early_stopping_rounds = 10, params = params_xgb, verbose = 0)
+nrounds <- cv_xgboost_end$early_stop$best_iteration
+
+set.seed(2025)
+model_xgboost_end_raw <- xgb.train(data = dm_train_end, nrounds = nrounds,  
+                                params = params_xgb)
+```
+
+
+```{r xgb_model_xgboost, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+set.seed(2025)
+cv_xgboost_start <- xgb.cv(data = dm_train_start, nrounds = 2000, nfold = 4,
+                          early_stopping_rounds = 10, params = params_xgb, verbose = 0)
+nrounds <- cv_xgboost_start$early_stop$best_iteration
+
+set.seed(2025)
+model_xgboost_start_raw <- xgb.train(data = dm_train_start, nrounds = nrounds,  
+                                params = params_xgb)
+
+set.seed(2025)
+cv_xgboost_end <- xgb.cv(data = dm_train_end, nrounds = 2000, nfold = 4,
+                          early_stopping_rounds = 10, params = params_xgb, verbose = 0)
+nrounds <- cv_xgboost_end$early_stop$best_iteration
+
+set.seed(2025)
+model_xgboost_end_raw <- xgb.train(data = dm_train_end, nrounds = nrounds,  
+                                params = params_xgb)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+後のコードの見通しを良くするため，予測モデルの予測値の計算に必要な処理をまとめてひとつの関数にしておく．学習データですべての行で同じ数値となっている列がある場合は，新たなデータを予測モデルに投入する場合もその列のデータを取り除く必要がある．この部分の処理も前述の関数に含めたうえで，必要な情報をモデルとともに同じリストに格納しておくこととする．
+
+`}{`{=latex}
+To streamline downstream projection logic, we package prediction execution into a unified function. If certain features were constant and dropped during training, they must be similarly removed when scoring new datasets. We bundle this handling alongside the model object in a dedicated list.
+`}\end{Translate}`{=latex}
+
+
+```{r xgb_model_predfun_code, eval=FALSE}
+model_xgboost_start <- list(
+  model = model_xgboost_start_raw,
+  constant_cols = constant_cols_start
+  )
+model_xgboost_end <- list(
+  model = model_xgboost_end_raw, 
+  constant_cols = constant_cols_end
+  )
+
+predfun_xgboost <- function(model, newdata){
+  tmp <- newdata %>% get_x %>% get_modelmatrix
+  tmp <- tmp[, -model$constant_cols, drop = FALSE] 
+  predict(model$model, tmp)
+}
+```
+
+```{r xgb_model_predfun, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+model_xgboost_start <- list(
+  model = model_xgboost_start_raw,
+  constant_cols = constant_cols_start
+  )
+model_xgboost_end <- list(
+  model = model_xgboost_end_raw, 
+  constant_cols = constant_cols_end
+  )
+}
+predfun_xgboost <- function(model, newdata){
+  tmp <- newdata %>% get_x %>% get_modelmatrix
+  tmp <- tmp[, -model$constant_cols, drop = FALSE] 
+  predict(model$model, tmp)
+}
+```
+
+# `\translateI{`{=latex}EV計算の実装`}{`{=latex}Implementing EV Calculation`}`{=latex}
+
+## `\translateI{`{=latex}群団の分割`}{`{=latex}Disaggregating Policy Cohorts`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+将来プロジェクションにあたっては説明変数 `duration` を 1 年ごとに順次加算して解約率を予測する．しかし，実際のデータでは `duration` はいくつかにグルーピングされてしまっているため，このグルーピングを解除し，1年単位のレコードに分割する必要がある．
+`}{`{=latex}
+In cash flow projections, policy duration is incremented year by year to project future lapse rates. However, because duration is aggregated into broad bands in the study dataset, these cohorts must be disaggregated into single policy-year records.
+`}\end{Translate}`{=latex}
+
+```{r ev_sep_1}
+df_all %>% group_by(lapse_study_year, duration, issue_year) %>%
+  summarise(sum(exposure), .groups = "drop")
+```
+
+`\begin{Translate}{`{=latex}
+ここで契約年 `issue_year` の情報を活用すれば，ありえる `duration` の範囲を絞り込むことができる．
+
+たとえば、`lapse_study_year == 2000 & duration == 6-9 & issue_year == 1991-1993` の組み合わせのレコードに対しては，`lapse_study_year =  issue_year + duration - 1` の関係式から `duration` は `8` 以上 `10` 以下となる．しかし `10` は `duration == 6-9` の条件に反する．したがって，残る可能性は `8`, `9` となる．
+
+これ以上 `duration` の範囲を絞り込むことは出来ないので，`8` のレコードと `9` のレコードに2等分に分割する．同じように，複数の `duration` がありえるキーの組み合わせに対しては，等分することで `duration` のグルーピングを解除する．
+`}{`{=latex}
+By leveraging `issue_year` information, the feasible range of `duration` can be narrowed down.
+
+For instance, for records with `lapse_study_year == 2000`, `duration == 6-9`, and `issue_year == 1991-1993`, the relationship `duration = lapse_study_year - issue_year + 1` mathematically yields possible durations of 8 through 10. However, duration 10 contradicts the condition `duration == 6-9`. Thus, the remaining possibilities are durations 8 and 9.
+
+Because no further granular information is available, we split the record equally into two records representing durations 8 and 9, respectively. Similarly, whenever multiple durations are possible for a given key combination, exposures are allocated equally across the valid durations.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+加えて，`issue_year` には `Pre-1991` という群団があるが、 実際の `issue_year` が推定できる `lapse_study_year == 2000` のレコードを確かめてみると `duration == 13-` (実際の契約年は1988年以前) のレコードが他に比べて非常に少ないことが分かる．
+`}{`{=latex}
+Additionally, for the aggregated cohort `issue_year == "Pre-1991"`, inspecting records at `lapse_study_year == 2000` reveals that exposures at `duration == 13-` (policies issued in 1988 or earlier) are negligible compared to other duration bands.
+`}\end{Translate}`{=latex}
+
+
+```{r ev_sep_2}
+df_all %>% filter(issue_year == "-1990", lapse_study_year < 2004) %>%
+  group_by(lapse_study_year, duration, issue_year) %>%
+  summarise(sum(exposure), .groups = "drop")
+```
+
+
+`\begin{Translate}{`{=latex}
+そのため，1987 年以前契約のボリュームはほとんどないと判断し，`issue_year` は 1988 年以降であると仮定する．
+`}{`{=latex}
+Assuming virtually zero policy volume for contracts issued in 1987 or earlier, we treat `Pre-1991` policies as having been issued in 1988 or later.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+このような方法でグルーピングを解除した `duration` を今しばらく `duration_estimated` という名前で区別することとする．また， `issue_year` も`lapse_study_year =  issue_year + duration - 1` の関係式から判定できる．`duration_estimated` にこの関係式を当てはめて判定したものを，同じように `issue_year_estimated` とする．
+`}{`{=latex}
+We denote the disaggregated duration as `duration_estimated`. The corresponding issue year derived from `issue_year = lapse_study_year - duration_estimated + 1` is similarly designated as `issue_year_estimated`.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+実際の分割処理は，もともとのキーの組み合わせに対して，分割すべきキーとレコードを分割するための係数を対応付けるテーブルを用意し，これと `left_join()` 関数により結合することで行う．
+`}{`{=latex}
+In practice, this disaggregation is performed by pre-building a mapping table that links original cohort keys to valid `duration_estimated` values and split proportions, and merging it via `left_join()`.
+`}\end{Translate}`{=latex}
+
+```{r ev_sep_functions}
+df_conv_issue_year_estimated <- data.frame(
+  issue_year = c("-1990", "-1990", "-1990", 
+                 "1991-1993", "1991-1993", "1991-1993", 
+                 "1994-1996", "1994-1996", "1994-1996", 
+                 "1997-1999", "1997-1999", "1997-1999", 
+                 "2000-2002", "2000-2002", "2000-2002", 
+                 "2003-2004", "2003-2004", 
+                 "2005-2007", "2005-2007", "2005-2007") %>%
+    factor(levels = levels(df_all$issue_year), ordered = TRUE),
+  issue_year_estimated = 1988:2007
+)
+
+df_conv_duration_estimated <- data.frame(
+  duration = c("06-09", "06-09", "06-09", "06-09",
+                 "10", "11", "12", 
+                 rep("13-", 55 - 13 + 1)) %>%
+    factor(levels = levels(df_all$duration), ordered = TRUE),
+  duration_estimated = 6:55
+)
+
+# Enumerate all valid combinations
+df_conv_estimated <- expand.grid(
+  lapse_study_year = unique(df_all$lapse_study_year),
+  duration = unique(df_all$duration),
+  issue_year = unique(df_all$issue_year)
+  ) %>%
+  left_join(df_conv_issue_year_estimated, join_by(issue_year == issue_year), relationship = "many-to-many") %>%
+  left_join(df_conv_duration_estimated, join_by(duration == duration), relationship = "many-to-many") %>%
+  filter(issue_year_estimated + duration_estimated - 1 == lapse_study_year)
+
+# Calculate split proportions for disaggregating records
+df_conv_estimated <- df_conv_estimated %>% left_join(
+  df_conv_estimated %>% group_by(lapse_study_year, duration, issue_year) %>%
+    summarise(exposure_rate = 1/n(), .groups = "drop"),
+  join_by(lapse_study_year == lapse_study_year,
+          duration == duration,
+          issue_year == issue_year)
+) %>% arrange(lapse_study_year, duration, issue_year)
+ 
+# Function to disaggregate records into single-year durations
+fn_sep_to_estimated <- function(df_tmp){
+  df_tmp <- df_tmp %>% left_join(df_conv_estimated,
+    join_by(lapse_study_year == lapse_study_year,
+          duration == duration,
+          issue_year == issue_year), relationship = "many-to-many")
+  for(col in c("exposure_amount", "exposure_count", "lapse_amount", "lapse_count", "exposure", "lapse")){
+    if(col %in% names(df_tmp)){
+      df_tmp <- df_tmp %>% mutate(!!col := .data[[col]] * exposure_rate)
+    }
+  }
+  df_tmp %>% select(-exposure_rate)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+例えば次のレコードの場合，
+`}{`{=latex}
+For example, consider the following raw records:
+`}\end{Translate}`{=latex}
+
+
+```{r ev_sep_functions_ex_1}
+df_tmp <- df_train_start[1:5, ]
+df_tmp %>%
+  select(ID, lapse_study_year, policy_year, duration, 
+         exposure, lapse, exposure_amount)
+```
+
+
+`\begin{Translate}{`{=latex}
+グルーピング解除によるレコードの分割結果は次のとおりである．
+`}{`{=latex}
+Applying the disaggregation function yields the following expanded records:
+`}\end{Translate}`{=latex}
+
+
+```{r ev_sep_functions_ex_2}
+df_tmp %>%
+  fn_sep_to_estimated %>%
+  select(ID, lapse_study_year, policy_year, duration, issue_year_estimated, 
+         duration_estimated, exposure, lapse, exposure_amount)
+```
+
+
+
+
+## `\translateI{`{=latex}将来契約ポートフォリオ作成用補助関数`}{`{=latex}Helper Functions for In-Force Portfolio Roll-Forward`}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+将来時点の契約ポートフォリオを作るための補助関数をいくつか定義しておく．次の `fn_shift_year()` 関数はデータの年限を進めるために，単純に`policy_year`と`duration_estimated`に特定の数値を加算するものである．
+`}{`{=latex}
+We define several helper functions to roll the in-force portfolio forward. The `fn_shift_year()` function advances policy duration by adding a specified number of years to `policy_year` and `duration_estimated`.
+`}\end{Translate}`{=latex}
+
+
+```{r ev_shiftyear}
+fn_shift_year <- function(df_sep, year){
+  df_sep %>% mutate(policy_year = policy_year + year) %>%
+    mutate(duration_estimated = duration_estimated + year)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+例えば，前述のレコードに対して5年シフトすると次のとおりである．
+`}{`{=latex}
+For example, advancing the previous sample records by 5 years produces the following table:
+`}\end{Translate}`{=latex}
+
+
+```{r ev_shiftyear_ex}
+df_tmp %>%
+  fn_sep_to_estimated %>%
+  fn_shift_year(year = 5) %>%
+  select(ID, lapse_study_year, policy_year, duration, issue_year_estimated, 
+         duration_estimated, exposure, lapse, exposure_amount)
+```
+
+
+`\begin{Translate}{`{=latex}
+次の`fn_get_port_eopy()`関数は，当年度の解約実績を適用した1年後の保有契約ポートフォリオを作るための補助関数である．
+`}{`{=latex}
+The `fn_get_port_eopy()` function decrements the portfolio by actual observed lapses to construct the actual end-of-year in-force portfolio.
+`}\end{Translate}`{=latex}
+
+
+
+```{r ev_shiftyear_eopy}
+fn_get_port_eopy <- function(df_sep){
+  # If only exposure_amount is present, decrement it proportionally using exposure counts
+  if ("exposure" %in% names(df_sep) & "lapse" %in% names(df_sep) &
+      "exposure_amount" %in% names(df_sep) & !("lapse_amount" %in% names(df_sep))){
+      df_sep <- df_sep %>%
+        mutate(exposure_amount = exposure_amount * (exposure - lapse) / exposure)
+  }
+  for(col in list(c("exposure_amount", "lapse_amount"), 
+                  c("exposure_count", "lapse_count"), 
+                  c("exposure", "lapse"))){
+    if(col[1] %in% names(df_sep) & col[2] %in% names(df_sep)){
+      df_sep <- df_sep %>%
+        mutate(!!col[1] := .data[[col[1]]] - .data[[col[2]]]) %>%
+        mutate(!!col[2] := 0)
+    }
+  }
+  df_sep %>% fn_shift_year(year = 1)
+}
+```
+
+
+
+`\begin{Translate}{`{=latex}
+例えば，前述のレコードに対してこの関数を適用すると次のとおりである．
+`}{`{=latex}
+Applying this decrement function to our sample records yields:
+`}\end{Translate}`{=latex}
+
+```{r ev_shiftyear_eopy_ex}
+df_tmp %>%
+  fn_sep_to_estimated %>%
+  fn_get_port_eopy %>%
+  select(ID, lapse_study_year, policy_year, duration, issue_year_estimated,
+         duration_estimated, exposure, lapse, exposure_amount)
+```
+
+
+`\begin{Translate}{`{=latex}
+予測モデルにデータを投入する際は `*_estimated` ではない元のキーにその情報を反映しておく必要がある．次の `fn_set_from_estimated()` 関数はそのための補助関数である．
+`}{`{=latex}
+When scoring models, the disaggregated `*_estimated` variables must be mapped back to the original categorical factors expected by the prediction pipeline. The `fn_set_from_estimated()` function handles this conversion.
+`}\end{Translate}`{=latex}
+
+
+```{r ev_set_from_estimated}
+fn_set_from_estimated <- function(df_sep){
+  df_sep %>%
+    left_join(
+      df_conv_duration_estimated %>% rename(duration_new = duration),
+      join_by(duration_estimated == duration_estimated),
+      relationship = "many-to-one"
+      ) %>%
+    mutate(duration = duration_new) %>%
+    left_join(
+      df_conv_issue_year_estimated %>% rename(issue_year_new = issue_year),
+      join_by(issue_year_estimated == issue_year_estimated),
+      relationship = "many-to-one"
+      ) %>%
+    mutate(issue_year = issue_year_new) %>%
+    select(-duration_estimated, -issue_year_estimated,
+           -duration_new, -issue_year_new)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+前述のレコードに対してこの関数を適用すると次のとおりである．
+`}{`{=latex}
+Converting the shifted records back to original model factors yields:
+`}\end{Translate}`{=latex}
+
+```{r ev_set_from_estimated_ex}
+df_tmp %>%
+  fn_sep_to_estimated %>%
+  fn_shift_year(year = 5) %>%
+  fn_set_from_estimated %>%
+  select(ID, lapse_study_year, policy_year, issue_year, duration, exposure, lapse)
+```
+
+
+## `\translateI{`{=latex}将来保険料収入の設定`}{`{=latex}Projecting Future Gross Premium Cash Flows`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+元論文に記載のとおり，将来利益は各年度の将来保険料収入に定率のプロフィットマージン率を乗じたものとしてモデル化している．本データセットには保険金額にあたるデータはあるが，保険料のデータそのものはない．ARTの場合を含む，保険期間の短い平準払定期保険の場合，ローディングを無視することで （年単位の）予定死亡率 × S という形で概算できるため，本研究ではそのようにモデル化している．
+`}{`{=latex}
+As specified in the paper, future statutory profits are modeled by multiplying projected gross premium cash flows by a constant profit margin ratio. While face amount exposure is recorded in the dataset, gross premium figures are not provided. For term life business, gross premiums can be approximated by multiplying valuation mortality rates by face amount exposure ($q \times S$).
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+報告書P7によると，ARTの場合は米国の2001CSOという業界共通の生命表の一定率として設定されることが多いのだという．これを参考に，本研究では2001CSOを予定死亡率の基準として採用する．
+`}{`{=latex}
+Referencing Page 7 of the SOA report, post-level ART premiums in the US are commonly priced as a percentage of the 2001 CSO mortality table. Accordingly, we adopt the 2001 CSO tables as the pricing benchmark.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+CSOは選択・終局表の形をしており，かつ男女・健康体区分別に細分化されている．[2001 CSO Preferred Class Structure Mortality Report & Tables](https://www.soa.org/resources/experience-studies/2005-2009/intl-2001-cso-preferred-class-structure-mortality-tables/) から取得できるエクセルデータは扱いやすいが，一部の健康体区分の種別（喫煙区分無，喫煙区分有だが健康体区分無）はこのエクセルからは取得できないため，別途 [Mortality and Other Rate Tables](https://mort.soa.org/Default.aspx) から手動で取得する．
+`}{`{=latex}
+The 2001 CSO tables follow a select and ultimate structure categorized by gender, smoking status, and underwriting class. Most tables are sourced from the [2001 CSO Preferred Class Structure Mortality Report & Tables](https://www.soa.org/resources/experience-studies/2005-2009/intl-2001-cso-preferred-class-structure-mortality-tables/), while missing composite categories (e.g., aggregate and undifferentiated smoker) are supplemented from the [SOA Mortality and Other Rate Tables](https://mort.soa.org/Default.aspx) repository.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+保険年齢（ANB; Age Nearest Birthday）と満年齢（ALB; Age Last Birthday）のデータ双方が存在する．SOAデータセットの年齢がどちらを指しているかについて特に報告書で特定されていないと思われるが，今回は米国で一般的なANBを仮定する．
+`}{`{=latex}
+Both Age Nearest Birthday (ANB) and Age Last Birthday (ALB) tables exist; we assume ANB, which is standard in US life insurance practice.
+`}\end{Translate}`{=latex}
+
+
+
+```{r ev_premium_cso_read}
+df_mort_dur6 <- read_excel("cso\\2001 CSO.xlsx", sheet = "Dur6", range = "A1:D1801")
+df_mort_ult <- read_excel("cso\\2001 CSO.xlsx", sheet = "Ult", range = "A1:D2179")
+
+df_mort_dur6 <- df_mort_dur6 %>% 
+  mutate(risk_class = factor(risk_class, levels = levels(df_all$risk_class))) %>%
+  mutate(gender = factor(gender, levels = c("M", "F"),
+                         labels = levels(df_all$gender)))
+df_mort_ult <- df_mort_ult %>% 
+  mutate(risk_class = factor(risk_class, levels = levels(df_all$risk_class))) %>%
+  mutate(gender = factor(gender, levels = c("M", "F"),
+                         labels = levels(df_all$gender)))
+```
+
+
+`\begin{Translate}{`{=latex}
+具体的にどの区分にどの生命表をあてはめるかは元論文に記載のとおり．
+`}{`{=latex}
+The mapping between policy risk classes and specific 2001 CSO mortality tables follows the definitions in the original paper.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+各年齢・性別の死亡率をグラフにすると次のとおり．ただし，縦軸は対数をとっている．
+`}{`{=latex}
+Plotting mortality rates on a logarithmic scale illustrates the rate curves across underwriting classes.
+`}\end{Translate}`{=latex}
+
+
+```{r ev_premium_cso_plot}
+ggplot(df_mort_dur6 %>% filter(gender == "male"),
+       mapping = aes(x = issue_age, y = log(mortality), group = risk_class, color = risk_class)) +
+  geom_line() + ggtitle("2001 CSO Mortality Male Duration = 6")
+ggplot(df_mort_dur6 %>% filter(gender == "female"),
+       mapping = aes(x = issue_age, y = log(mortality), group = risk_class, color = risk_class)) +
+  geom_line() + ggtitle("2001 CSO Mortality Female Duration = 6")
+ggplot(df_mort_ult %>% filter(gender == "male"),
+       mapping = aes(x = age, y = log(mortality), group = risk_class, color = risk_class)) +
+  geom_line() + ggtitle("2001 CSO Mortality Male Ultimate")
+ggplot(df_mort_ult %>% filter(gender == "female"),
+       mapping = aes(x = age, y = log(mortality), group = risk_class, color = risk_class)) +
+  geom_line() + ggtitle("2001 CSO Mortality Female Ultimate")
+```
+
+`\begin{Translate}{`{=latex}
+大小関係を比較してみると，健康体区分無(`"Undiff **"`に当てはめ)はそれぞれのResidual Standard (`"Non-Pref **"`に当てはめ)と近い水準である．また，喫煙区分無(`"Agg/Unknown"`に当てはめ)は非喫煙者 Residual Standard (`"Non-Pref NS"`に当てはめ)と極めて近い水準である．Preferred Smoker (`"Pref SM"`に当てはめ) は概ねそれらを超える死亡率になっており，喫煙が死亡率に及ぼす影響の大きさが推測できる．`}{`{=latex}
+Comparing mortality levels shows that undifferentiated classes align closely with their respective residual standard classes. Aggregate non-smoker rates track standard non-smoker rates, while preferred smoker mortality substantially exceeds non-smoker categories, illustrating the pronounced impact of smoking.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+次の`fn_calc_premium()`関数は，この生命表による予定死亡率 × S により保険料を計算する．
+`}{`{=latex}
+The `fn_calc_premium()` function computes gross premium income by multiplying mortality rates from these tables by face amount exposure.
+`}\end{Translate}`{=latex}
+
+```{r ev_premium_function}
+fn_calc_premium <- function(df_sep){
+  df_sep %>% 
+    prep_toint_age() %>%
+    mutate(issue_age = round(issue_age)) %>%
+    mutate(age = issue_age + duration_estimated - 1) %>%
+    # Level period uses Select mortality at duration 6 (joined by issue age)
+    left_join(
+      df_mort_dur6 %>% rename(mortality_dur6 = mortality),
+      join_by(issue_age == issue_age, gender == gender, risk_class == risk_class),
+      relationship = "many-to-one"
+    ) %>%
+    # Post-level ART period uses Ultimate mortality (varies by attained age)
+    left_join(
+      df_mort_ult %>% rename(mortality_ult = mortality),
+      join_by(age == age, gender == gender, risk_class == risk_class),
+      relationship = "many-to-one"
+    ) %>%
+    mutate(premium = if_else(duration_estimated <= 10, mortality_dur6, mortality_ult) * exposure_amount) %>%
+    pull(premium)
+}
+```
+
+
+
+`\begin{Translate}{`{=latex}
+ある契約で将来保険料の推移をグラフにしてみると次のとおり．保険料のジャンプ率は `premium_jump_ratio` が示す値よりも小さめになる傾向がある．この差異がなぜ現れているか，それを再現するにはどうすればよいかは推測が難しいため，本研究では特段対処はしない．また，平準保険料期間が終わってもARTとはならない場合（`post_level_premium_structure == "Other"`）もデータには含まれているものの，実際にどういうものなのかを特定するのが困難であるため，ARTの場合と同じ扱いとする．
+`}{`{=latex}
+Plotting projected premium cash flows for a sample policy demonstrates the sharp increase in premiums at duration 11. While empirical premium jump ratios in the data are somewhat lower than theoretical ART rates, and non-ART policies are included, we apply the standard ART formula across all post-level cohorts for modeling consistency.
+`}\end{Translate}`{=latex}
+
+
+```{r ev_premium_function_ex}
+# Select a sample policy with a relatively large premium_jump_ratio
+df_tmp <- df_test_start %>% fn_sep_to_estimated %>%
+  filter(duration_estimated == 6, premium_jump_ratio == "10.01-11.00") %>%
+  slice_head(n = 1)
+
+df_tmp_all <- tibble()
+for(y in 0:20){
+  df_tmp_all <- rbind(df_tmp_all, df_tmp %>% fn_shift_year(year = y))
+}
+premium_tmp <- df_tmp_all %>% fn_calc_premium
+
+cbind(df_tmp_all, premium = premium_tmp) %>%
+  select(ID, policy_year, issue_age, duration_estimated, premium)
+
+ggplot(cbind(df_tmp_all, premium = premium_tmp),
+       mapping = aes(x = duration_estimated, y = premium)) +
+  geom_line()
+```
+
+
+## `\translateI{`{=latex}将来CF展開・利益現価計算`}{`{=latex}Cash Flow Projection and Present Value Calculation`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+元論文に記載の前提のもと，将来利益現価の計算を行う関数を作成する．割引現在価値の計算の際には経過の末端部分から遡るように計算すると効率的であるため，そのように実装している．
+`}{`{=latex}
+We construct a function to calculate the present value of future profits (PVFP). For computational efficiency, discounting is implemented recursively by rolling backward from the final projection period ($L=20$).
+`}\end{Translate}`{=latex}
+
+
+
+```{r ev_calc_ev}
+# projection_term : Projection Horizon
+# verbose :
+#   - If >= 1, returns projected cash flows in addition to EV
+#   - If 1, returns data for t = 0 only; if 2, returns all projection periods
+# int_rate : Valuation Interest Rate
+# pm_rate : Profit Margin Ratio (After Tax)
+fn_calc_ev <- function(df_sep, model, predfun,
+                       projection_term = 20, verbose = 0, int_rate = 0.02,
+                       pm_rate = 0.05){
+  
+  if (verbose >= 1){
+    df_projeted_data <- tibble()
+  }
+  for (t in (projection_term - 1):0){
+    
+    df_sep_t <- df_sep %>% fn_shift_year(year = t)
+    if(t == projection_term - 1){
+      ev <- rep(0, nrow(df_sep))
+      if (verbose >= 1){
+        lapse_rate <- ev
+      }
+    }else{
+      lapse_rate <- predfun(model, df_sep_t %>% fn_set_from_estimated)
+      ev <- (1 - lapse_rate) / (1 + int_rate) * ev
+      if (verbose >= 1){
+        df_projeted_data$cf <- df_projeted_data$cf * (1 - lapse_rate)
+      }
+    }
+    premium <- df_sep_t %>% fn_calc_premium
+    if (verbose >= 1){
+      df_projeted_data <- rbind(
+        data.frame(
+          rowid = 1:nrow(df_sep),
+          t = rep(t, nrow(df_sep)),
+          premium = premium,
+          lapse_rate = lapse_rate,
+          cf = premium 
+        ),
+        df_projeted_data
+      )
+    }
+    
+    ev <- ev + premium * pm_rate
+  }
+  if (verbose >= 1){
+    if (verbose <= 1){
+      df_projeted_data <- df_projeted_data %>% filter(t == 0)
+    }
+    return(list(ev = ev, df_projeted_data = df_projeted_data))
+  }else{
+    return(list(ev = ev))
+  }
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+前の節で抽出した1件のサンプルで計算した場合の各年度の保険料キャッシュフローや解約率等の計算結果は次のとおりである．`duration == 10` での解約率上昇を反映し，以降の期間の保険料キャッシュフローが非常に小さくなっていることがわかる．
+`}{`{=latex}
+Evaluating the backward projection on our sample policy produces the following annual cash flow profile. Reflecting the shock lapse at duration 10, surviving premium volumes diminish sharply in subsequent durations.
+`}\end{Translate}`{=latex}
+
+
+
+```{r ev_calc_ev_ex_1}
+ret <- fn_calc_ev(
+  df_tmp,
+  model_xgboost_start, predfun_xgboost,
+  verbose = 2)
+ret$df_projeted_data
+```
+
+`\begin{Translate}{`{=latex}
+この保険料キャッシュフローに対してプロフィットマージン率を乗じ，割引現在価値をとったものが EV である．
+`}{`{=latex}
+Multiplying these surviving premium cash flows by the profit margin ratio and discounting at 2.0% yields the EV (PVFP).
+`}\end{Translate}`{=latex}
+
+```{r ev_calc_ev_ex_1_ev}
+ret$ev[[1]]
+```
+
+`\begin{Translate}{`{=latex}
+最後に，テストデータ全体に対してEVを計算すると次のとおり．
+`}{`{=latex}
+Calculating the EV across the entire opening portfolio yields the starting valuation figure:
+`}\end{Translate}`{=latex}
+
+
+```{r ev_calc_ev_ex_2_code, eval=FALSE}
+df_test_start_sep <- df_test_start %>% fn_sep_to_estimated
+
+ev_result_start <- fn_calc_ev(
+  df_test_start_sep,
+  model_xgboost_start, predfun_xgboost,
+  verbose = 1) # Used later to construct the expected portfolio reflecting projected lapses.
+sum(ev_result_start$ev)
+```
+
+
+```{r ev_calc_ev_ex_2, echo=FALSE}
+df_test_start_sep <- df_test_start %>% fn_sep_to_estimated
+if(SETTING_FIT_MODELS_INST){
+ev_result_start <- fn_calc_ev(
+  df_test_start_sep,
+  model_xgboost_start, predfun_xgboost,
+  verbose = 1) # Used later to construct the expected portfolio reflecting projected lapses.
+sum(ev_result_start$ev)
+}
+```
+
+
+# `\translateI{`{=latex}EV 変動要因分析の計算`}{`{=latex}Calculating EV Analysis of Movement`}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+元論文に記載の方法で変動要因分析を行う．ここでは評価年度 （Evaluation Year） 2002年度末から2003年度末へのEV変動要因分析を題材とする．2002年度末，すなわち期初時点のEVは前の節で計算した`ev_result_start`である．これを出発点に，2003年度末までの変動要因分析を作成する．
+`}{`{=latex}
+We perform an Analysis of Movement (AoM) following the methodology in the original paper, using the transition from year-end 2002 to year-end 2003 (evaluation year 2002) as our case study. Starting with the opening EV (`ev_result_start`), we step through each intermediate projection scenario.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+まず，テストデータ全体を期初の保有契約ポートフォリオとみなし，期初時点の解約率異動予測を反映した保有契約ポートフォリオ，実際の解約異動を反映した保有契約ポートフォリオをそれぞれ計算する．
+`}{`{=latex}
+First, treating the opening test portfolio as active contracts, we construct two closing portfolios: one decremented by expected lapses projected under beginning-of-period assumptions, and one decremented by actual observed lapses.
+`}\end{Translate}`{=latex}
+
+
+```{r ev_ma_df_test_start_sep}
+df_test_start_end_pred <- df_test_start_sep %>%
+  cbind(pred = ev_result_start$df_projeted_data %>%
+          filter(t == 0) %>% select(lapse_rate) %>% pull) %>%
+  mutate(exposure = exposure * (1 - pred)) %>%
+  mutate(exposure_amount = exposure_amount * (1 - pred)) %>%
+  select(-pred) %>% fn_shift_year(year = 1)
+
+df_test_start_end_act <- df_test_start_sep %>% fn_get_port_eopy
+```
+
+`\begin{Translate}{`{=latex}
+これで各シナリオの解約率モデルと保有契約ポートフォリオのデータが揃ったため，順次それらを計算していく．時点異動を反映するためのシナリオ A を計算する．保有契約ポートフォリオを期初時点の解約率異動予測を反映したものに差し替える．
+`}{`{=latex}
+With all models and portfolios prepared, we evaluate the sequential scenarios. Scenario A computes EV using the expected portfolio under beginning-of-period assumptions to isolate the time-unwinding effect.
+`}\end{Translate}`{=latex}
+
+
+```{r ev_ma_a_code, eval=FALSE}
+ev_result_a <- fn_calc_ev(
+  df_test_start_end_pred,
+  model_xgboost_start, predfun_xgboost,
+  verbose = 0)
+sum(ev_result_a$ev)
+```
+
+
+```{r ev_ma_a, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+ev_result_a <- fn_calc_ev(
+  df_test_start_end_pred,
+  model_xgboost_start, predfun_xgboost,
+  verbose = 0)
+}
+sum(ev_result_a$ev)
+```
+
+`\begin{Translate}{`{=latex}
+次に，前提実績差異を計算するためのシナリオ B を計算する．保有契約ポートフォリオを実際の解約異動に反映したものに差し替える．
+`}{`{=latex}
+Next, Scenario B evaluates the actual portfolio under beginning-of-period assumptions. The difference between Scenario A and Scenario B defines the experience variance.
+`}\end{Translate}`{=latex}
+
+
+```{r ev_ma_b_code, eval=FALSE}
+ev_result_b <- fn_calc_ev(
+  df_test_start_end_act,
+  model_xgboost_start, predfun_xgboost,
+  verbose = 0)
+sum(ev_result_b$ev)
+```
+
+
+```{r ev_ma_b, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+ev_result_b <- fn_calc_ev(
+  df_test_start_end_act,
+  model_xgboost_start, predfun_xgboost,
+  verbose = 0)
+}
+sum(ev_result_b$ev)
+```
+
+`\begin{Translate}{`{=latex}
+さらに，前提変更差異を計算するためのシナリオ C を計算する．解約率予測モデルを期末時点のものに変更する．
+`}{`{=latex}
+Furthermore, Scenario C updates the prediction model to end-of-period assumptions. The difference between Scenario B and Scenario C isolates the operating assumption change.
+`}\end{Translate}`{=latex}
+
+
+
+```{r ev_ma_c_code, eval=FALSE}
+ev_result_c <- fn_calc_ev(
+  df_test_start_end_act,
+  model_xgboost_end, predfun_xgboost,
+  verbose = 0)
+sum(ev_result_c$ev)
+```
+
+
+```{r ev_ma_c, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+ev_result_c <- fn_calc_ev(
+  df_test_start_end_act,
+  model_xgboost_end, predfun_xgboost,
+  verbose = 0)
+}
+sum(ev_result_c$ev)
+```
+
+`\begin{Translate}{`{=latex}
+最後に，保有契約ポートフォリオを期末時点のテストデータに変更することで，次年度の EV が計算され，変動要因分析に必要なすべての計算が揃う．
+`}{`{=latex}
+Finally, evaluating the closing portfolio at the end of the year yields Scenario $(y+1)$-End, completing the movement reconciliation.
+`}\end{Translate}`{=latex}
+
+
+```{r ev_ma_end_code, eval=FALSE}
+ev_result_end <- fn_calc_ev(
+  df_test_end %>% fn_sep_to_estimated,
+  model_xgboost_end, predfun_xgboost,
+  verbose = 0)
+sum(ev_result_end$ev)
+```
+
+
+```{r ev_ma_end, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+ev_result_end <- fn_calc_ev(
+  df_test_end %>% fn_sep_to_estimated,
+  model_xgboost_end, predfun_xgboost,
+  verbose = 0)
+}
+sum(ev_result_end$ev)
+```
+
+`\begin{Translate}{`{=latex}
+これらの計算結果に基づいて変動を計算し，ウォーターフォール図にすると次のとおり．元論文の結果が再現されている．
+`}{`{=latex}
+Computing the step-by-step variances and visualizing them via a waterfall chart replicates the figures reported in the original paper.
+`}\end{Translate}`{=latex}
+
+```{r ev_ma_plot_waterfall}
+vec_values <- c(sum(ev_result_start$ev)
+              , sum(ev_result_a$ev) - sum(ev_result_start$ev)
+              , sum(ev_result_b$ev) - sum(ev_result_a$ev)
+              , sum(ev_result_c$ev) - sum(ev_result_b$ev)
+              , sum(ev_result_end$ev) - sum(ev_result_c$ev))
+
+waterfall(
+    labels = c(
+      "Start", "Time-\nUnwinding\nEffect", "Experience\nVariance", 
+      "Assumption\nChanges", "Portfolio\nChange"),
+    total_axis_text = "End",
+    values = vec_values,
+    rect_text_labels = scales::comma(vec_values, accuracy = 1),
+    total_rect_text = scales::comma(sum(vec_values), accuracy = 1),
+    calc_total = T
+  )
+```
+
+
+<!--SAVE MODELS-->
+
+```{r save_models, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+  save(model_xgboost_start, model_xgboost_end, 
+       ev_result_start, ev_result_a, ev_result_b, ev_result_c, ev_result_end,
+       file = SETTING_FNAME_MODELS_INST_EV)
+}
+```
+
+
+# Acknowledgments {.unnumbered}
+
+`\begin{Translate}{`{=latex}
+本研究の実施にあたり，公表データ（SOA 10-Year Level Premium Term Lapse Study）を提供いただいた Society of Actuaries (SOA) に深謝いたします．なお，本論文の作成プロセスにおける英文表現の推敲およびコード構築の補助にあたっては，適切な人間による確認と責任のもとで生成 AI ツール（Gemini / ChatGPT 等）を活用いたしました．
+`}{`{=latex}
+The authors gratefully acknowledge the Society of Actuaries (SOA) for providing the public dataset (SOA 10-Year Level Premium Term Lapse Study) utilized in this study. In addition, generative AI tools (such as Gemini and ChatGPT) were used to assist with English language editing and R code refinement, with all final content thoroughly reviewed and verified by the authors.
+`}\end{Translate}`{=latex}
+<!--
+また，研究の方向性や実務的分析に関して貴重なコメントと助言をいただいた査読者および同僚の皆様に感謝申し上げます．
+We also express our sincere appreciation to the reviewers and colleagues whose insightful comments and suggestions greatly improved this paper. 
+-->
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+

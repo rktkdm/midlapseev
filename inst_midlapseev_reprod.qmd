@@ -1,0 +1,2145 @@
+---
+title: "\\translate{MID を使用した解約率予測 GLM の改良 - 論文再現編}{Enhancing GLM-Based Lapse Rate Models Using MID - Replication Tutorial}"
+author:
+  - Reiji Kozuma\thanks{Daido Life Insurance Company, \texttt{rktkdm@gmail.com}}
+  - Ryoichi Asashiba\thanks{Daido Life Insurance Company, \texttt{ryoichi.asashiba@gmail.com}}
+  - Yoshihiro Matsumori\thanks{Sompo Japan Insurance Inc., \texttt{ymatsumori1@sompo-japan.co.jp}}
+  - Hirokazu Iwasawa\thanks{Graduate School of Accountancy, Waseda University, \texttt{iwahiro@bb.mbn.or.jp}}
+date: "`r Sys.Date()`"
+format:
+  pdf:
+    pdf-engine: xelatex
+    documentclass: bxjsarticle
+    classoption: xelatex,ja=standard,base=10pt
+#    toc: true
+#    toc-title: "Table of contents"
+#    toc-depth: 4
+    number-sections: true
+    fig-width: 6
+    fig-height: 4
+    link-citations: true
+    include-in-header:
+      - text: |
+          %%% 2. フォント・文字設定
+          \setmathfont{Latin Modern Math}
+          \setmathfont{TeX Gyre Pagella Math}[range=bb]
+          %%% 3. レイアウト・段落・見出し設定
+          \makeatletter
+          \setlength{\parindent}{15pt} % 変更（括弧内の数値がゼロのときは字下げなしになるが、1pt以上とすると見た目が変わらず、その原因を理解できていない）
+          \setlength{\parskip}{0pt} % 変更（これがとても大きい）
+          % 見出し（# 〜 #####）の余白・改行を一括調整
+          % 各階層の見出し余白調整（バランスよく余裕を持たせた設定）
+          % 各階層の見出し余白調整（上部の余白をさらに広げたゆったり版）
+          \renewcommand\section{\@startsection{section}{1}{\z@}%
+            {2.5ex \@plus.5ex \@minus.2ex}% <- 上の余白（旧: 1.8ex）約1.5行分
+            {0.8ex \@plus.2ex}%             <- 下の余白（変更なし）
+            {\normalfont\Large\bfseries}}
+          \renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
+            {2.0ex \@plus.3ex \@minus.2ex}% <- 上の余白（旧: 1.5ex）約1行強
+            {0.5ex \@plus.2ex}%             <- 下の余白（変更なし）
+            {\normalfont\large\bfseries}}
+          \renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}%
+            {1.6ex \@plus.3ex \@minus.2ex}% <- 上の余白（旧: 1.2ex）
+            {0.4ex \@plus.1ex}%             <- 下の余白（変更なし）
+            {\normalfont\normalsize\bfseries}}
+          \renewcommand\paragraph{\@startsection{paragraph}{4}{\z@}%
+            {1.4ex \@plus.2ex \@minus.2ex}% <- 上の余白（旧: 1.0ex）
+            {0.3ex \@plus.1ex}%             <- 下の余白（変更なし）
+            {\normalfont\normalsize\bfseries}}
+          \renewcommand\subparagraph{\@startsection{subparagraph}{5}{\z@}%
+            {1.2ex \@plus.2ex \@minus.2ex}% <- 上の余白（旧: 0.8ex）
+            {0.3ex \@plus.1ex}%             <- 下の余白（変更なし）
+            {\normalfont\normalsize\bfseries}}
+          %\usepackage{etoolbox}%上下の余白詰め
+          %\AtBeginEnvironment{Shaded}{%
+          %  \vspace{-0.5\baselineskip}
+          %}
+          %\AtEndEnvironment{Shaded}{%
+          %  \vspace{-0.5\baselineskip}
+          %}
+          \makeatother
+          \usepackage{tocloft} %% 目次の表示設定
+          \renewcommand{\cftdot}{} % 目次のリーダー（点線）を消去
+          %%以下は自動挿入?
+          % \setlength{\emergencystretch}{3em}
+          % \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+          %%% 4. 画像・図表関連
+          \usepackage{wrapfig}
+          \usepackage{pdfpages}
+          \usepackage{placeins}
+          %%% 5. テーブル関連
+          \usepackage{array}
+          %%% 6. コードブロック・シンタックスハイライト
+          \usepackage{fvextra}
+          \usepackage{mdframed}
+          %%コードブロックの表示設定
+          \newcommand{\CodeBlockSizeDefault}{\small}%コードブロックの文字サイズ \scriptsize < \footnotesize <\small
+          \newcommand{\CodeBlockSize}{\CodeBlockSizeDefault}
+          \newcommand{\CodeDefault}{\renewcommand{\CodeBlockSize}{\CodeBlockSizeDefault}}
+          \newcommand{\CodeSmall}{\renewcommand{\CodeBlockSize}{\small}}
+          \newcommand{\CodeFootnote}{\renewcommand{\CodeBlockSize}{\footnotesize}}
+          \newcommand{\CodeScript}{\renewcommand{\CodeBlockSize}{\scriptsize}}
+          \definecolor{codebg}{RGB}{248,248,248}%背景色
+          \renewenvironment{Shaded}%デフォルトの設定を削除
+            {}
+            {}
+          \BeforeBeginEnvironment{Shaded}{% %枠線の追加
+          \begin{mdframed}[
+            backgroundcolor=codebg,
+            linewidth=0.3pt,
+            roundcorner=2pt,
+            skipabove=3pt,
+            skipbelow=3pt]
+          }
+          \AfterEndEnvironment{Shaded}{%
+            \end{mdframed}
+            \par\vspace{8pt}% <- コードブロックの直後に強制的に8pt空ける
+          }
+          \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+            showspaces = false,
+            showtabs = false,
+            breaklines,
+            commandchars=\\\{\},
+            fontsize=\CodeBlockSize,
+            baselinestretch=0.96 %行間詰め
+          }
+          \DefineVerbatimEnvironment{verbatim}{Verbatim}{
+            showspaces = false,
+            showtabs = false,
+            breaklines,
+            commandchars=\\\{\}
+          }
+          %%% 7. 参考文献 (CSL References)
+          %% 参考文献一覧の文字サイズ
+          %\AtBeginEnvironment{CSLReferences}{
+          %  \scriptsize
+          %  \linespread{0.95}\selectfont
+          %}
+          %%% 8. 対訳・言語表示用カスタムマクロ
+          \usepackage{ifthen}
+          \newboolean{showLanguage}
+          \newboolean{showJapanese}
+          \newboolean{showEnglish}
+          \setboolean{showLanguage}{false}
+          \setboolean{showJapanese}{false}   % 日本語表示する場合 true
+          \setboolean{showEnglish}{true}    % 英語表示する場合 true
+          \newif\ifshowLanguageI
+          \newif\ifshowJapaneseI
+          \newif\ifshowEnglishI
+          \ifthenelse{\boolean{showLanguage}}{\showLanguageItrue}{\showLanguageIfalse}
+          \ifthenelse{\boolean{showJapanese}}{\showJapaneseItrue}{\showJapaneseIfalse}
+          \ifthenelse{\boolean{showEnglish}}{\showEnglishItrue}{\showEnglishIfalse}
+          \newcommand{\languageTag}[1]{\textbf{[#1]} }
+          \newcommand{\lnJA}{\languageTag{JA}}
+          \newcommand{\lnEN}{\languageTag{EN}}
+          \DeclareRobustCommand{\translateI}[2]{\ifshowJapaneseI \ifshowLanguageI \lnJA \fi #1 \fi \ifshowEnglishI \ifshowLanguageI \lnEN \fi #2 \fi}
+          %\newcommand{\translate}[2]{#1 (#2)}
+          %\newcommand{\translate}[2]{\ifthenelse{\boolean{showLanguage}}{#1}{} (#2)}
+          \newcommand{\translate}[2]{%
+            \ifthenelse{\boolean{showJapanese}}{\ifthenelse{\boolean{showLanguage}}{\lnJA}{}#1\\}{}%
+            \ifthenelse{\boolean{showEnglish}}{\ifthenelse{\boolean{showLanguage}}{\lnEN}{}#2\\}{}%
+          }
+          \newenvironment{Translate}[2]{%
+            \ifthenelse{\boolean{showJapanese}}{\ifthenelse{\boolean{showLanguage}}{\lnJA}{}#1\par}{}%
+            \ifthenelse{\boolean{showEnglish}}{\ifthenelse{\boolean{showLanguage}}{\lnEN}{}#2\par}{}%
+          }{}
+          \renewcommand{\abstractname}{\translateI{概要}{Abstract}}%
+          %%% 9. メタデータ・タイトル設定
+          % \maketitle の本来の動作を \oldmaketitle に退避
+          \let\oldmaketitle\maketitle
+          % 一時的に \maketitle を何もしない命令に上書き
+          \renewcommand{\maketitle}{}
+    include-before-body:
+      - text: |
+          % 1ページ目：表紙PDFを出力
+          %\includepdf[pages=1]{ICA2026 Paper Coversheet_MID_2611.pdf}
+          % 2ページ目冒頭：本来のタイトルブロック（\oldmaketitle）を出力
+          \oldmaketitle
+    keep-tex: true
+execute:
+  cache: true
+csl: apa.csl
+bibliography: papermidrreferences_2617.bib
+---
+
+
+
+```{r comment, include=FALSE, eval=FALSE}
+## 2026/9/25 rough draft
+## 2026/9/25 added hyper parameters tuning, consistency to the basic part.
+```
+
+```{r setup_qmd_flg, include=FALSE, cache.rebuild=TRUE}
+SETTING_IS_ROOT_DOCUMENT <- !exists("FLG_IN_RENDERING") || !FLG_IN_RENDERING
+```
+
+```{r setup_qmd, include=FALSE, cache.rebuild=TRUE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+options(tibble.width = Inf, pillar.sigfig = 5)
+
+# install packages
+pkgs <- c("tidyverse", "readxl", "xgboost", "ROCR") #midr
+for (pkg in pkgs) {
+  if (!(pkg %in% installed.packages())) {
+    install.packages(pkg)
+  }
+}
+
+# detach packages
+default <- c(".GlobalEnv", "tools:rstudio", "tools:vscode",
+             "package:stats", "package:graphics",
+             "package:grDevices", "package:utils",
+             "package:datasets", "package:methods",
+             "Autoloads", "package:base")
+for (pkg in setdiff(search(), default)) {
+  detach(pkg, character.only = TRUE)
+  }
+
+# clear objects
+remove(list=objects())
+```
+
+
+\pagenumbering{gobble}
+
+```{r setup_include_dependents, include=FALSE, cache.rebuild=TRUE}
+source("inst_midlapseev_common.R")
+SETTING_IS_ROOT_DOCUMENT <- FALSE
+doc_basic <- it.read('inst_midlapseev_basic.qmd')
+doc_ev <- it.read('inst_midlapseev_ev.qmd')
+SETTING_IS_ROOT_DOCUMENT <- !exists("FLG_IN_RENDERING") || !FLG_IN_RENDERING
+```
+
+
+```{r setup_setting_fname, include=FALSE, cache.rebuild=TRUE}
+SETTING_FNAME_MODELS_INST_REPROD <- "models_inst_reprod.RData" #SETTING_FIT_MODELS_INSTで省略した時の読み込み先
+SETTING_FNAME_MODELS_INST_BASIC <- "models_inst_basic.RData"
+SETTING_FNAME_TUNEDRESULT_INST_REPROD <- "tunedresult_xgb.RData"
+SETTING_FIT_MODELS_INST <- FALSE#TRUE#
+```
+
+```{r model_load, include=FALSE}
+if(!SETTING_FIT_MODELS_INST){
+  load(SETTING_FNAME_MODELS_INST_REPROD)
+}
+```
+
+```{r setup_include_dependents_extract, include=FALSE}
+it.extract(doc_basic, c("load_packages_inst_basic", "load_data", "data_prep", "meas_logloss", "meas_auc", "prepfun_soa_xy_age"))
+it.extract(doc_ev, c("load_packages_inst_ev", "ev_sep_functions", "ev_shiftyear", "ev_shiftyear_eopy", "ev_set_from_estimated", "ev_premium_cso_read", "ev_premium_function", "ev_calc_ev"))
+```
+
+
+`\begin{abstract}\begin{Translate}{`{=latex}
+本ドキュメントは研究の再現性確保の観点から，元論文 @KozumaICA2026 の主要な計算結果を再現するコードを提供するものである．層化モデルの構築や学習・検証ウィンドウの管理を担う補助コードを含む．複数か年にわたる大規模な計算を伴うため，計算に一定程度の負荷がかかることに注意が必要である．
+`}{`{=latex}
+To ensure scientific reproducibility, this document provides the complete R code required to replicate all primary empirical results presented in the original paper [@KozumaICA2026]. It includes helper logic for managing multi-year rolling training/validation windows and fitting stratified models. Please note that executing the full rolling pipeline across all evaluation years involves significant computational processing.
+`}\end{Translate}\end{abstract}`{=latex}
+
+```{=latex}
+\vspace{1em}
+\renewcommand{\contentsname}{\translateI{目次}{Table of Contents}}
+\tableofcontents
+\clearpage % 目次の後に改ページして本文（第1章）を開始
+```
+
+# `\translateI{`{=latex}準備`}{`{=latex}Preparation`}`{=latex}
+
+## `\translateI{`{=latex}パッケージとデータの準備`}{`{=latex}Preparing Packages and Data`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+本ドキュメントで使用するパッケージを読み込む．
+`}{`{=latex}
+Load the R packages required for full replication.
+`}\end{Translate}`{=latex}
+
+```{r load_packages_inst_reprod, cache.rebuild=TRUE}
+library(midr)
+library(tidyverse)
+library(readxl)
+library(xgboost)
+library(ROCR)
+```
+
+
+`\begin{Translate}{`{=latex}
+データの読み込みとその前処理，統計学的評価関数の設定は基本編と同一であるため，本ドキュメントでは記載を省略する．
+`}{`{=latex}
+Data ingestion, baseline preprocessing, and statistical loss functions are identical to the basic tutorial and are omitted here.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+読み込みの後，元論文で説明したような Rolling Window を作成する．`purrr` パッケージを利用し，`year` 列をキーとするデータフレームに学習・検証データを格納する．
+`}{`{=latex}
+We construct the rolling training and validation splits across 9 evaluation periods (2002–2010), storing each 3-year training and 1-year test dataset in a tidy tibble via `purrr`.
+`}\end{Translate}`{=latex}
+
+
+```{r split_all}
+years <- tibble(year = 2002:2010)
+
+dfs_split <- years %>% mutate(
+  df_train = map(year, \(year)
+   df_all %>% filter(lapse_study_year >= year-2, lapse_study_year <= year)),
+  df_test = map(year, \(year)
+   df_all %>% filter(lapse_study_year == year+1)
+))
+```
+
+
+`\begin{Translate}{`{=latex}
+データフレームから必要な列のみを取り出す部分を関数化する．
+`}{`{=latex}
+We define helper functions to extract specific subsets of predictors, weights, and targets.
+`}\end{Translate}`{=latex}
+
+
+```{r fn_get_cols}
+# Convert to design matrix
+get_modelmatrix <- function(df){
+  df <- prep_toint_pjratio(df)
+  df <- model.matrix(~ ., df) # An intercept column of all 1s is created
+}
+get_xo <- function(df){ # All predictors and target variables
+  df %>% select(setdiff(names(df),
+                        c("ID", "lapse_study_year", "policy_year", "issue_year", "exposure_amount")))
+}
+get_xe <- function(df){ # Excluding y (lapse rate)
+  df <- df %>% get_xo
+  df <- df %>% select(setdiff(names(df), c("lapse_rate")))
+}
+get_xy <- function(df){
+  df <- df %>% get_xo
+  df <- df %>% select(setdiff(names(df), c("lapse", "exposure")))
+}
+get_x <- function(df){ # Predictors only
+  df <- df %>% get_xo
+  df <- df %>% select(setdiff(names(df), c("lapse", "exposure", "lapse_rate")))
+}
+get_y <- function(df){ # y (lapse rate) only
+  df %>% pull(lapse_rate)
+}
+get_w <- function(df){ # w (exposure) only
+  df %>% pull(exposure)
+}
+```
+
+
+## `\translateI{`{=latex}予測ワークフロー管理オブジェクトの設計`}{`{=latex}Workflow Management Reference Class`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+本研究ではモデル構築とその評価を多数繰り返す．この手続きを独自のオブジェクトを用いて管理することでコードの見通しを良くする．`tidymodels` の `workflows` パッケージと考え方がよく似ているが，`parsnip` パッケージに対応したモデルでなくとも簡素に利用可能なよう，シンプルな実装としている．
+
+メモリ節約の観点から，R 言語の参照クラス機能を利用して実装する．
+`}{`{=latex}
+Because model fitting and evaluation are repeated across numerous rolling windows and strata, we design a lightweight `Workflow` class using R's Reference Classes (`setRefClass`) to manage preprocessing, training, and prediction pipelines cleanly while avoiding unnecessary memory duplication.
+`}\end{Translate}`{=latex}
+
+```{r util_Workflow}
+Workflow <- setRefClass(
+  Class = "Workflow",
+  
+  fields = list (
+    fit_extra_arg     = "list",
+    prepfun           = "function", # function(newdata)
+    fitfun            = "function", # function(df_train_prep, fit_extra_arg)
+    predfun           = "function", # function(model_fitted, newdata_prep)
+    model_fitted      = "ANY"
+  ),
+  
+  methods = list (
+    initialize = function(prepfun = function(x) x, fitfun, predfun) {
+      prepfun <<- prepfun
+      fitfun <<- fitfun
+      predfun <<- predfun
+    },
+    fit = function(df_train){
+      tmp <- fitfun(prepfun(df_train), fit_extra_arg)
+      model_fitted <<- tmp
+    },
+    predict = function(newdata){
+      predfun(model_fitted, prepfun(newdata))
+    },
+    get_predfun = function(){ # function(wf, newdata)
+      function(wf, newdata){
+        wf$predict(newdata)
+      }
+    },
+    clone = function(){
+      new_wf <- Workflow$new(prepfun, fitfun, predfun)
+      new_wf
+    }
+  )
+)
+```
+
+
+`\begin{Translate}{`{=latex}
+Rolling Window に亘って一括でモデル構築を行うためのユーティリティ関数を用意する．引数 `wf_base` にはひな型となるオブジェクトを与える．全 Window に対する構築済みモデルがデータフレームに格納されて返却される．
+`}{`{=latex}
+We implement a utility function to fit models across all rolling windows simultaneously from a base workflow template.
+`}\end{Translate}`{=latex}
+
+```{r util_fit_allwindow}
+fit_allwindow <- function(wf_base, dfs = dfs_split){
+  dfs %>% transmute(year,
+    wf = pmap(as.list(.), \(year, df_train, ...){
+      wf <- wf_base$clone()
+      message("fitting ",year," ", appendLF = FALSE)
+      wf$fit(df_train)
+      message("done")
+      wf
+    })
+  )
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+`fit_allwindow()` 関数で返却されたデータフレームから，`Workflow` オブジェクトを一つ取り出すためのユーティリティ関数を用意する．
+`}{`{=latex}
+We define a helper function to extract a fitted workflow object for a specific evaluation year.
+`}\end{Translate}`{=latex}
+
+```{r util_pluck_wf}
+pluck_wf <- function(wfs, y){
+  wfs %>% filter(year == y) %>% pull(wf) %>% first
+}
+```
+
+
+## `\translateI{`{=latex}層化モデル関係の補助関数の用意`}{`{=latex}Helper Functions for Stratified Modeling`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+本研究ではモデルを層化する形で実装する都合上，モデルの利用の際には適切な層にデータを分離する前処理が必要となる．データを層別に分離し，層別に個別の処理を繰り返す場合， `purrr` パッケージの機能を用いるのが便利である．ここではこのパッケージの機能を最大限活用することとし，他のパッケージによる関数も同様の考え方で機能を拡張する．
+
+`dplyr` パッケージに実装されている `group_nest()`, `group_by()`, `join_by()` 関数について，層化に使用する変数を複数個とれるようにした拡張版を追加する．以下の関数では，引数`group` に `c(aa,bb)` のような形で変数名を与えることで，それらによって層化された処理を行える．
+`}{`{=latex}
+Because models are stratified by duration and post-level premium structure, data must be partitioned cleanly into corresponding strata. We define vector-capable wrappers for `dplyr` functions (`group_nest()`, `group_by()`, `join_by()`) to support arbitrary multi-variable stratification effortlessly.
+`}\end{Translate}`{=latex}
+
+
+```{r util_grouped_func}
+group_nest_vec <- function(df = NULL, group = NULL, ...){
+  vars_quo <- enquo(group)
+  vars_expr <- rlang::quo_get_expr(vars_quo)
+  if (is.null(vars_expr)){
+    return(df %>% group_nest(...))
+  }else{
+    is_vec <- is.call(vars_expr) && vars_expr[[1]] == as.name("c")
+    if (!is_vec) {
+      return(df %>% group_nest({{group}}, ...))
+    }
+    var_syms <- as.list(vars_expr[-1])  # Extract contents of c(...)
+    return(df %>% group_nest(!!!var_syms, ...))
+  }
+}
+group_by_vec <- function(df = NULL, group = NULL, ...){
+  vars_quo <- enquo(group)
+  vars_expr <- rlang::quo_get_expr(vars_quo)
+  if (is.null(vars_expr)){
+    return(df %>% group_by(...))
+  }else{
+    is_vec <- is.call(vars_expr) && vars_expr[[1]] == as.name("c")
+    if (!is_vec) {
+      return(df %>% group_by({{group}}, ...))
+    }
+    var_syms <- as.list(vars_expr[-1])
+    return(df %>% group_by(!!!var_syms, ...))
+  }
+}
+join_by_vec <- function(group, ...){
+  vars_quo <- enquo(group)
+  vars_expr <- rlang::quo_get_expr(vars_quo)
+
+  if (is.null(vars_expr)){
+    return(join_by(...))
+  }else{
+    is_vec <- is.call(vars_expr) && vars_expr[[1]] == as.name("c")
+    if (!is_vec) {
+      return(join_by({{group}}, ...))
+    }
+    var_syms <- as.list(vars_expr[-1]) 
+    return(join_by(!!!var_syms, ...))
+  }
+}
+```
+
+`\begin{Translate}{`{=latex}
+層化された処理の結果はデータフレームで得られる．そのようなデータフレームが複数あり，それらを結合したい場合は `join_by()` 関数を使用する．一方で，層化されていない場合は単にデータフレーム同士を `cbind()` すればよい．この双方の場合について同じ書き方で対応できるようなユーティリティ関数を用意する．
+`}{`{=latex}
+We provide a unified helper function that handles both grouped joins and simple column bindings seamlessly depending on whether stratification is applied.
+`}\end{Translate}`{=latex}
+
+```{r util_full_join_n}
+full_join_n <- function(x, y, group, ...){
+  vars_quo <- enquo(group)
+  vars_expr <- rlang::quo_get_expr(vars_quo)
+  if (is.null(vars_expr)){
+    cbind(x, y)
+  }else{
+    full_join(x, y, by = join_by_vec({{group}}), ...)
+  }
+}
+```
+
+
+## `\translateI{`{=latex}統計学的評価関数の統合および層化`}{`{=latex}Batch Statistical Metric Calculation`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+単一のモデル（`Workflow`オブジェクト）に対して，複数の統計学的評価結果をデータフレームに格納するユーティリティ関数を用意する．層化処理，すなわち層別に評価関数を適用する機能も用意するが，モデル自体が層化されている必要はない．引数 `types` に，`"logloss_total"`, `"logloss_mean"`, `"auc"` のどれかを設定したリストを指定する．
+`}{`{=latex}
+We define a utility function to compute multiple statistical evaluation metrics (Log-loss and AUC) across all strata and test splits in a single call.
+`}\end{Translate}`{=latex}
+
+```{r meas_calc_scores}
+calc_scores <- function(wf, types, df_train = NULL, df_test = NULL, verbose = F, group = NULL){
+  #browser()
+  res <- NULL
+  extras <- NULL
+  y_pred <- NULL
+  scores_logloss <- NULL
+  for(type in types){
+    score <- NA
+    extra <- NA
+    if (type == "logloss_mean"){
+      type <- "logloss_mean_test"
+    }
+    if (type == "logloss_total"){
+      type <- "logloss_total_test"
+    }
+    if (type == "auc"){
+      type <- "auc_test"
+    }
+    
+    if (type %in% c("logloss_mean_test", "logloss_total_test") &
+        is.null(y_pred)){
+      y_pred <- wf$predict(df_test)
+      y_act <- df_test %>% get_y
+      w <- df_test %>% get_w
+      df_test <- df_test %>% mutate(.pred = y_pred, .act = y_act, .w = w)
+    }
+    
+    if (type == "logloss_mean_test" || type == "logloss_total_test"){
+      mean <- type == "logloss_mean_test"
+      score <- df_test %>% group_nest_vec({{group}}) %>%
+        mutate(.score = map_dbl(data, function(data){
+          calc_logloss(data$.pred, data$.act, data$.w, mean = mean)
+        })) %>%
+        select(-data)
+    }
+    if (type == "auc_test"){
+      tmp <- df_test %>% group_nest_vec({{group}}) %>%
+        mutate(.tmp = map(data, function(data){
+          auc <- calc_auc(data$.pred, data$.act, data$.w, verbose = TRUE)
+          score <- as.numeric(auc$auc@y.values)
+          list(auc = auc, score = score)
+        })) %>% mutate(.score = map_dbl(.tmp, \(x) x$score), .auc = map(.tmp, \(x) x$auc)) %>%
+        group_by_vec({{group}})
+      score <- tmp %>% select(group_vars(tmp), .score)
+      
+      if (verbose)
+        extra <- tmp %>% select(group_vars(tmp), .auc)
+    }
+    score <- score %>% rename(!!type := .score)
+    # extra <- wrap_atomic(extra, group = {{group}})
+    if (is.null(res)){
+      res <- score
+    }else{
+      res <- res %>% full_join_n(score, group = {{group}})
+    }
+    if (is.null(extras)){
+      extras <- extra
+    }else{
+      extras <- extras %>% full_join_n(extra, group = {{group}})
+    }
+  }
+  tmp <- extras %>% group_nest_vec({{group}})
+  res %>% full_join_n(tmp %>% rename(extras = data), group = {{group}})
+}
+```
+
+
+## `\translateI{`{=latex}EV変動要因分析の関数化`}{`{=latex}Automating EV Analysis of Movement`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+`fn_calc_ev()` 関数の実装までは EV編と同様であるので省略する．以降の変動要因分析を行う部分について，より効率的に行えるように関数を追加する．
+`}{`{=latex}
+The core projection function `fn_calc_ev()` follows the EV tutorial. Below, we implement wrapper logic to automate AoM evaluations across multiple consecutive annual periods.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+まず，各シナリオの計算結果をサマライズする関数を用意する．
+`}{`{=latex}
+First, we construct a function to compute and record EV figures for individual AoM scenarios.
+`}\end{Translate}`{=latex}
+
+
+
+```{r ev_ma_function_1}
+calc_evma_sub <- function(result, y, scenario,
+                          df_sep, model, predfun, group = NULL,
+                          verbose_return_all = F, verbose_ev_detail = F, ...){
+  
+  message("calculating EV scenario ", y, " ",scenario)
+  ev <- fn_calc_ev(df_sep, model, predfun, ...)
+  if (verbose_ev_detail){
+    result$df_ev_detail <- result$df_ev_detail %>%
+      rbind(cbind(y = y, scenario = scenario, df_sep, ev = ev$ev))
+  }
+  if (verbose_return_all){
+    result$df_tmp_all <- ev
+  }
+  result$scenario <- rbind(result$scenario, tibble(y = y, scenario = scenario))
+  
+  result$ev <- rbind(result$ev,
+                     cbind(tibble(y = y, scenario = scenario),
+                           df_sep %>% mutate(ev = ev$ev) %>%
+                             group_by_vec({{group}}) %>%
+                             summarise(ev = sum(ev), .groups = "drop")))
+  
+  result
+}
+```
+
+
+
+`\begin{Translate}{`{=latex}
+次に，指定した Rolling Window にわたってこの関数を複数回実行し，変動要因分析を実施する関数を実装する．
+`}{`{=latex}
+Next, we implement the multi-year driver function that iterates through all rolling intervals to compute the full AoM reconciliations.
+`}\end{Translate}`{=latex}
+
+
+
+```{r ev_ma_function_2}
+calc_evma_allwindow <- function(wfs, verbose = 0, group = NULL, dfs = dfs_split){
+  ret <- list()
+  ret$ev <- tibble()
+  ret$ma <- tibble()
+  ret$scenario <- tibble()
+  verbose_ev_detail <- verbose >= 1
+  if (verbose_ev_detail){
+    ret$df_ev_detail <- tibble()
+  }
+  verbose_ev_cfdetail <- verbose >= 2
+  
+  for(i in 1:(length(wfs$year))){
+    if (i > 1){
+      y_start <- y_end
+      wf_start <- wf_end
+      df_start <- df_end
+      ret_start <- ret_end
+    }
+    y_end <- wfs$year[[i]]
+    wf_end <- wfs %>% filter(year == y_end) %>% pull(wf) %>% first
+    df_end <- dfs %>% filter(year == y_end) %>% pull(df_test) %>% first %>%
+      fn_sep_to_estimated
+    
+    if (i > 1){
+      
+      df_start_pred <- df_start %>%
+        cbind(pred = ret_start$df_projeted_data %>% filter(t == 0) %>% select(lapse_rate) %>% pull) %>%
+        mutate(exposure = exposure * (1 - pred)) %>%
+        mutate(exposure_amount = exposure_amount * (1 - pred)) %>%
+        select(-pred) %>% fn_shift_year(year = 1)
+      
+      ret <- calc_evma_sub(ret, y_end, "A",
+                           df_start_pred, wf_start, wf_start$get_predfun(),
+                           verbose_ev_detail = verbose_ev_detail, group = {{group}}, verbose = 0)
+      
+      df_start_act <- df_start %>% fn_get_port_eopy
+      
+      ret <- calc_evma_sub(ret, y_end, "B",
+                           df_start_act, wf_start, wf_start$get_predfun(),
+                           verbose_ev_detail = verbose_ev_detail, group = {{group}}, verbose = 0)
+      
+      ret <- calc_evma_sub(ret, y_end, "C",
+                           df_start_act, wf_end, wf_end$get_predfun(),
+                           verbose_ev_detail = verbose_ev_detail, group = {{group}}, verbose = 0)
+    }
+    ret <- calc_evma_sub(ret, y_end, "End",
+                         df_end, wf_end, wf_end$get_predfun(),
+                         verbose_ev_detail = verbose_ev_detail, verbose_return_all = T, group = {{group}},
+                         verbose = if_else(verbose_ev_cfdetail, 2, 1))
+    ret_end <- ret$df_tmp_all
+    ret$df_tmp_all <- NULL
+    
+    if (i > 1){
+      df_start <- ret$scenario %>% filter(y == y_start, scenario == "End") %>%
+        mutate(y = y_end, scenario = "0")
+      df_tmp <- rbind(df_start, ret$scenario %>% filter(y == y_end))
+      
+      df_ev2 <- ret$ev %>% filter(y == y_start, scenario == "End") %>%
+        mutate(y = y_end, scenario = "0")
+      ret$ma <- rbind(ret$ma, df_ev2)
+      for(r in 1:(nrow(df_tmp)-1)){
+        df_ev1 <- df_ev2
+        
+        s1 <- df_tmp$scenario[[r]]
+        s2 <- df_tmp$scenario[[r+1]]
+        
+        df_ev1 <- df_ev2 %>% rename(ev1 = ev) %>% select(-y, -scenario)
+        df_ev2 <- ret$ev %>% filter(y == y_end, scenario == s2)
+        df_ev12 <- df_ev1 %>% full_join_n(df_ev2, group = {{group}}) %>%
+          mutate(ev = ev - ev1) %>% select(-y, -scenario, -ev1)
+        df_ev12 <- cbind(
+          tibble(y = y_end, scenario = paste0(s2,"-",s1)),
+          df_ev12
+        )
+        ret$ma <- rbind(ret$ma, df_ev12)
+      }
+    }
+  }
+  ret
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+さらに，前述の統計学的評価関数を計算する機能をこの関数に統合する．
+`}{`{=latex}
+We integrate statistical metric scoring and EV AoM calculations into a master evaluation function (`calc_scores_allwindow()`).
+`}\end{Translate}`{=latex}
+
+
+
+
+```{r meas_calc_scores_allwindow}
+types_all <- c("logloss_mean", "logloss_total", "auc", "B-A", "C-B")
+setting_types_evma <- c("B-A", "C-B")
+
+calc_scores_allwindow <- function(wfs, types, verbose = FALSE, group = NULL, dfs = dfs_split){
+  
+  types_mvma <- intersect(types, setting_types_evma)
+  types_nonmvma <- setdiff(types, setting_types_evma)
+  
+  res <- list()
+  df <- NULL
+  if (length(types_nonmvma) > 0){
+    df <- dfs %>% inner_join(wfs, by = join_by(year == year)) %>%
+      transmute(
+        year,
+        result = pmap(list(wf = wf, df_train = df_train, df_test = df_test),
+                      calc_scores, types = types_nonmvma, verbose = verbose, group = {{group}})#
+      ) %>% unnest(result)
+    if (!verbose){
+      df <- df %>% select(-extras)
+    }
+  }
+  
+  if (length(types_mvma) > 0){
+    evma <- calc_evma_allwindow(wfs, ifelse(verbose, 1, 0), group = {{group}}, dfs = dfs)
+    if (TRUE)#if (verbose)
+      res$evma <- evma
+    df_evma <- evma$ma %>% group_by_vec(group = {{group}})
+    df_evma <- df_evma %>% mutate(year = y - 1) %>%
+      pivot_wider(names_from = scenario, values_from = ev) %>%
+      select(group_vars(df_evma), all_of(c("year", types_mvma)))
+    
+    if (is.null(df)){
+      df <- df_evma
+    }else{
+      df <- df %>% full_join(df_evma, by = join_by_vec(group = {{group}}, year == year))
+      if (verbose){
+        df <- df %>% select(-extras, everything(), extras)
+      }
+      
+    }
+  }
+  res$scores <- df
+  res
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+`calc_scores_allwindow()` 関数にはEV変動要因分析における各シナリオのEVをデータフレームの形で出力する機能がある．これを見やすく表示するための関数を定義する．
+`}{`{=latex}
+We define a helper function to format raw scenario figures into clean, publishable AoM tables.
+`}\end{Translate}`{=latex}
+
+
+```{r fn_get_evma}
+fn_get_evma <- function(scores_ev){
+  scores_ev <- scores_ev %>% mutate(
+    year = case_when(
+      scenario == "End" ~ y,
+      scenario == "A" ~ y-1, 
+      scenario == "B" ~ y-1,
+      scenario == "C" ~ y-1
+    ),
+    scenario = case_when(
+      scenario == "End" ~ "y-End",
+      scenario == "A" ~ "y+1-A", 
+      scenario == "B" ~ "y+1-B",
+      scenario == "C" ~ "y+1-C" 
+    )
+  )
+  scores_ev_s <- scores_ev %>% filter(
+    year < max(scores_ev$year) 
+  )
+  scores_ev_e <- scores_ev %>% filter(scenario == "y-End") %>% mutate(
+    year = year - 1,
+    scenario = "y+1-End"
+  ) %>% filter(
+    year >= min(scores_ev$year) 
+  )
+  scores_ev_ma <- rbind(scores_ev_s, scores_ev_e) %>% select(-y) %>%
+    pivot_wider(names_from = scenario, values_from = ev) %>% mutate(
+      `A-End` = `y+1-A` - `y-End`,
+      `B-A` = `y+1-B` - `y+1-A`,
+      `C-B` = `y+1-C` - `y+1-B`,
+      `End-C` = `y+1-End` - `y+1-C`,
+    )
+  
+  tab_show <- scores_ev_ma %>%
+    transmute(
+      `Evaluation Year` = year,
+      `y-End` = `y-End`,
+      `(y+1)-A` = `y+1-A`,
+      `(y+1)-B` = `y+1-B`,
+      `(y+1)-C` = `y+1-C`,
+      `(y+1)-End` = `y+1-End`,
+      `A-End` = `A-End`,
+      `B-A` = `B-A`,
+      `C-B` = `C-B`,
+      `End-C` = `End-C`
+    )
+  
+  tab_show
+}
+```
+
+
+# `\translateI{`{=latex}モデルの構築`}{`{=latex}Model Construction Across Windows`}`{=latex}
+
+## Reduced Baseline GLM {#sec-CaseStudy_SOA}
+
+### `\translateI{`{=latex}前処理の実装`}{`{=latex}Preprocessing Pipeline`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+SOA の作成した GLM と同様の前処理を行う関数を作成する．ただし，ここで構築するのは `face_amount` を取り除いた Reduced Baseline GLM である．後で  `face_amount` を戻した Baseline GLM も構築するので，処理が共通する部分は関数を分離して実装する．
+`}{`{=latex}
+We define the feature engineering function for the Reduced Baseline GLM. Common transformations shared with the full Baseline GLM are modularized.
+`}\end{Translate}`{=latex}
+
+```{r prepfun_soared_xy}
+prepfun_soa_common <- function(df_tmp){
+  df_tmp %>% prep_toint_age %>% prep_toint_pjratio %>%
+    mutate(
+      issue_age_sq = issue_age^2, issue_age_log = log(issue_age),
+      risk_class_group = risk_class %>%
+        factor(levels = levels_risk_class,
+               labels = c("Super-Pref NS","NS","NS","NS","NS","SM","SM","SM","SM")),
+      premium_mode_group = premium_mode %>%
+        factor(levels = levels_premium_mode,
+               labels = c("Annual","Semiannual/Quarterly","Semiannual/Quarterly",
+                          "Monthly/Biweekly","Monthly/Biweekly","Unknown/Other")),
+      premium_jump_ratio_group = cut(
+        if_else(premium_jump_ratio_unknown == 1, 0, premium_jump_ratio),
+        breaks = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 99), right = FALSE)) 
+}
+
+prepfun_soared_xy <- function(df_tmp){
+  df_tmp %>%
+    prepfun_soa_common %>%
+    select(duration, post_level_premium_structure,
+           issue_age, issue_age_sq, issue_age_log, risk_class_group,
+           premium_mode_group, premium_jump_ratio_group, exposure, lapse)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+次に基本編と同様，モデルに投入するデータに対する前処理を実装する．ただし，今回は各 Validation Year ごとに異なるモデルを構築しなければならないうえに，層化モデルのそれぞれに対しても個別に前処理を定める必要がある．モデルごとにきめ細やかに前処理方法を定める必要があるため，コードは複雑となる．
+`}{`{=latex}
+Next, we handle unobserved and sparse factor levels. Because separate GLMs are estimated for every window and stratum, dynamic collapsing rules must be implemented to avoid rank deficiency.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+`premium_jump_ratio_group`は，学習データで現れないカテゴリを検出し，振替先カテゴリへの対応表を用意する．振替先は，より高いカテゴリの中で一番近いカテゴリ，それが無い場合はより低いカテゴリの中で一番近いカテゴリとする．
+`}{`{=latex}
+For `premium_jump_ratio_group`, unobserved levels in a given stratum are dynamically mapped to the nearest observed category, prioritizing higher bands.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+他の説明変数も同じように対応表を用意する．`risk_class_group`は，`"Super-Pref NS"` が学習データで現れないことがあるため，性質の近い `"NS"` へ振り替える．`premium_mode_group` も `"Unknown/Other"` が学習データで現れないことがある．この群団は比較的解約率が高いことから，他の群団で最も解約率の高い `"Annual"` へ振り替える．
+`}{`{=latex}
+Similar mapping tables are established for other features: unobserved `"Super-Pref NS"` cases map to standard `"NS"`, and unobserved `"Unknown/Other"` payment modes map to `"Annual"`.
+`}\end{Translate}`{=latex}
+
+
+```{r model_glm_fitfun_prep}
+prep_emptylevel_soa <- function(data){
+  model <- list()
+  
+  # Identify zero-count levels in premium_jump_ratio_group and set replacement levels
+  df_alt <- tibble()
+  tb <- table(data$premium_jump_ratio_group)
+  for(rg in list(length(tb):1, 1:length(tb))){
+    alt <- NULL
+    for(i in rg){
+      if (tb[i] == 0){
+        if (!is.null(alt)){
+          df_alt <- rbind(df_alt, tibble(org = names(tb)[i], alt = alt))
+          tb[i] <- -1
+        }
+      }else{
+        alt <- names(tb)[i]
+      }
+    }
+  }
+  model$df_alt_premium_jump_ratio_group <- df_alt
+  
+  # Identify zero-count levels in risk_class_group and set replacement levels
+  df_alt <- tibble()
+  tb <- table(data$risk_class_group)
+  if (tb[["Super-Pref NS"]] == 0){
+    df_alt <- rbind(df_alt, tibble(org = "Super-Pref NS", alt = "NS"))
+  }
+  model$df_alt_risk_class_group <- df_alt
+  
+  # Identify zero-count levels in premium_mode_group and set replacement levels
+  df_alt <- tibble()
+  tb <- table(data$premium_mode_group)
+  if (tb[["Unknown/Other"]] == 0){
+    df_alt <- rbind(df_alt, tibble(org = "Unknown/Other", alt = "Annual"))
+  }
+  model$df_alt_premium_mode_group <- df_alt
+  
+  model
+}
+```
+
+
+### `\translateI{`{=latex}層別モデル構築部分の実装`}{`{=latex}Stratified Model Fitting`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+層化したモデルの実装にあたり，各モデルの実体はデータフレームに格納される形とする．そして`tidyr::nest()`と`purrr::map()`を組み合わせることで、データをグループごとに分割し，それぞれ処理を行った結果をデータフレームに格納する．
+`}{`{=latex}
+Fitted GLM objects are stored inside nested tibbles using `tidyr::nest()` and `purrr::map()`, enabling clean stratified estimation across duration and structure combinations.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+まずは，各層におけるモデルの構築を行う関数を用意する．
+`}{`{=latex}
+We define the estimation function for individual strata.
+`}\end{Translate}`{=latex}
+
+```{r model_glm_fitfun_st}
+fitfun_soa_st <- function(data, duration, post_level_premium_structure, ...){
+  model <- prep_emptylevel_soa(data)
+
+  model$model <- glm(cbind(lapse, exposure - lapse) ~
+        (. + premium_jump_ratio_group * issue_age) - 1,
+      family = binomial(), data = data)
+  gc(reset = TRUE)
+
+  model
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+続けて，学習データを各層に分離し，上記のモデル構築関数に受け渡す部分を実装する．ここに`duration`と`post_level_premium_structure`によるデータの層分けを記述している．
+`}{`{=latex}
+Next, we construct the factory function that partitions the training data by `duration` and `post_level_premium_structure` and fits stratum-specific GLMs.
+`}\end{Translate}`{=latex}
+
+```{r model_glm_fitfun}
+fitfun_soa_factory <- function(fitfun_st)
+  function(train, fit_extra_arg){
+    model <- list()
+    model_soa <- train %>% group_nest(duration, post_level_premium_structure) %>%
+      transmute(duration, post_level_premium_structure,
+                model = pmap(as.list(.), fitfun_st))
+    model$model <- model_soa
+    return(model)
+  }
+```
+
+
+`\begin{Translate}{`{=latex}
+この`fitfun_soa_factory()`関数にモデル構築関数`fitfun_soa_st()`を具体的にあてはめることで，学習データから層別GLMを構築する関数を得る．
+`}{`{=latex}
+Binding `fitfun_soa_st()` to the factory yields the complete stratified estimation function.
+`}\end{Translate}`{=latex}
+
+
+```{r fitfun_soa}
+fitfun_soa <- fitfun_soa_factory(fitfun_soa_st)
+```
+
+### `\translateI{`{=latex}層別モデル予測部分の実装`}{`{=latex}Stratified Model Prediction`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+つづいて，層別モデルを用いて予測を計算する部分を実装する．
+`}{`{=latex}
+We now implement the prediction logic for stratified models.
+`}\end{Translate}`{=latex}
+
+`\begin{Translate}{`{=latex}
+まず，学習データにないカテゴリで予測できるようにする．学習時に用意した対応表を結合し，予測できるカテゴリに変換する．なお，ここでは後の Improved GLM で使用する対応表に関連する部分も同時に実装している．
+`}{`{=latex}
+The `bake_emptylevel_soa()` function applies the stratum-specific mapping tables to remap unobserved test levels before scoring.
+`}\end{Translate}`{=latex}
+
+
+```{r model_glm_predfun_bake}
+bake_emptylevel_soa <- function(model_st, data){
+  df_alt <- model_st$df_alt_premium_jump_ratio_group
+  if (!is.null(df_alt) && nrow(df_alt) > 0){
+    data <- data %>%
+      left_join(df_alt,
+                join_by(premium_jump_ratio_group == org)) %>%
+      mutate(premium_jump_ratio_group = coalesce(alt, premium_jump_ratio_group)) %>%
+      select(-alt)
+  }
+  
+  df_alt <- model_st$df_alt_risk_class_group
+  if (!is.null(df_alt) && nrow(df_alt) > 0){
+    data <- data %>%
+      left_join(df_alt,
+                join_by(risk_class_group == org)) %>%
+      mutate(risk_class_group = coalesce(alt, risk_class_group)) %>%
+      select(-alt)
+  }
+  
+  df_alt <- model_st$df_alt_premium_mode_group
+  if (!is.null(df_alt) && nrow(df_alt) > 0){
+    data <- data %>%
+      left_join(df_alt,
+                join_by(premium_mode_group == org)) %>%
+      mutate(premium_mode_group = coalesce(alt, premium_mode_group)) %>%
+      select(-alt)
+  }
+  
+  df_alt <- model_st$df_alt_premium_jump_ratio_group2_st #I-3
+  if (!is.null(df_alt) && nrow(df_alt) > 0){
+    data <- data %>%
+      left_join(df_alt,
+                join_by(premium_jump_ratio_group2 == org, premium_mode_group_q == premium_mode_group_q)) %>%
+      mutate(premium_jump_ratio_group2 = coalesce(alt, premium_jump_ratio_group2)) %>%
+      select(-alt)
+  }
+  
+  df_alt <- model_st$df_alt_risk_class_int #I-6
+  if (!is.null(df_alt) && nrow(df_alt) > 0){
+    data <- data %>%
+      left_join(df_alt,
+                join_by(risk_class_int == org)) %>%
+      mutate(risk_class_int = coalesce(alt, risk_class_int)) %>%
+      select(-alt)
+  }
+  
+  tmp <- model_st$risk_class_int_null #I-6 
+  if (!is.null(tmp) && tmp){
+    data <- data %>% select(-risk_class_int)
+  }
+  
+  data
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+次に，各層で具体的に予測を行う部分を実装する．
+`}{`{=latex}
+Next, we implement prediction scoring within an individual stratum.
+`}\end{Translate}`{=latex}
+
+
+```{r model_glm_predfun_st}
+predfun_soa_st <- function(model, data, duration, post_level_premium_structure, ...){
+  d <- duration
+  p <- post_level_premium_structure
+  
+  model_st <- model %>% filter(
+    duration == d, post_level_premium_structure == p
+  ) %>% pull(model) %>% first
+  
+  data <- bake_emptylevel_soa(model_st, data)
+  model_obj <- model_st$model
+
+  predict(
+    model_obj,
+    data %>% select(-.rowid),
+    type = c("response"))
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+最後に，予測したいデータを各層に分離し，各層の予測関数に受け渡す部分を実装する．ここで注意が必要なのは，予測結果は層別に分離する前のデータフレームと同じ順序で返却しなければならないことである．`.rowid`という列に当初の順序を記録しておき，予測統合後にこの列でソートすることで順序を再現することとする．
+`}{`{=latex}
+Finally, `predfun_soa()` orchestrates scoring across all strata. A temporary `.rowid` index is tracked to ensure predictions are returned in the exact row order of the input dataset.
+`}\end{Translate}`{=latex}
+
+```{r model_glm_predfun_soa}
+predfun_soa <- function(model, newdata){
+  newdata %>%
+    mutate(.rowid = row_number()) %>%
+    group_nest(duration, post_level_premium_structure) %>%
+    mutate(
+      .pred = pmap(as.list(.), predfun_soa_st, model = model$model)
+    ) %>%
+    unnest(cols = c(data, .pred)) %>% arrange(.rowid) %>% pull(.pred)
+}
+```
+
+
+### `\translateI{`{=latex}モデルの構築と精度評価`}{`{=latex}Batch Fitting and Evaluation`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+ここまでで，モデル構築の一連の手順を全て関数の形で実装できた．これらを最初に用意した `Workflow` オブジェクトに装備し，`fit_allwindow()` 関数を適用することで，全 Window にわたる全ての学習過程が一括で行われる．
+`}{`{=latex}
+With all components modularized, we package them into our `Workflow` class and execute `fit_allwindow()` to estimate models across all 9 rolling windows.
+`}\end{Translate}`{=latex}
+
+```{r model_glm_fit_code, eval=FALSE}
+wf_base_soared <- Workflow$new(prepfun_soared_xy, fitfun_soa, predfun_soa)
+wfs_soared <- fit_allwindow(wf_base_soared)
+```
+
+```{r model_glm_fit, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+wf_base_soared <- Workflow$new(prepfun_soared_xy, fitfun_soa, predfun_soa)
+wfs_soared <- fit_allwindow(wf_base_soared)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+こうして得られた全 Window のモデル群に `calc_scores_allwindow()` 関数を適用することで，統計学的評価関数による評価とEV変動要因分析の双方がすべての Window で計算される．
+`}{`{=latex}
+Applying `calc_scores_allwindow()` evaluates statistical metrics and full EV AoM reconciliations across all rolling intervals.
+`}\end{Translate}`{=latex}
+
+
+```{r model_glm_scores_code, eval=FALSE}
+scores_soared <- calc_scores_allwindow(wfs_soared, types = types_all, verbose = T)
+```
+
+```{r model_glm_scores, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+scores_soared <- calc_scores_allwindow(wfs_soared, types = types_all, verbose = T)
+}
+```
+
+
+
+`\begin{Translate}{`{=latex}
+全てのスコアを表示すると次のとおり．なお，この表の `year` は統計学的評価関数の場合は $\text{Validation Year} - 1$が，EV変動要因分析の場合は Evalution Year に対応する．
+`}{`{=latex}
+The evaluation scores across all windows are displayed below. Here, `year` represents the opening valuation year for EV AoM, corresponding to $\text{validation year} - 1$ for statistical metrics.
+`}\end{Translate}`{=latex}
+
+```{r model_glm_scores_display}
+scores_soared$scores %>% select(-extras)
+```
+
+
+`\begin{Translate}{`{=latex}
+加えて，元論文で表示した完全な変動要因分析を出力する． `calc_scores_allwindow()` 関数には各シナリオのEVを副次的に出力する機能がある．これを表示すると次のとおり．
+`}{`{=latex}
+Additionally, we output the complete EV Analysis of Movement table across all scenarios, replicating the results reported in the original paper.
+`}\end{Translate}`{=latex}
+
+
+```{r model_soared_evma_display}
+scores_soared$evma$ev %>% fn_get_evma
+```
+
+
+
+## XGBoost Model
+
+
+`\begin{Translate}{`{=latex}
+続けて，XGBoost のモデル構築を行う．モデル構築および予測の具体的実装は基本編と同様である．また，これを `Workflow` オブジェクトに装備し，モデルの構築と精度評価を行う手続きは Reduced Baseline GLM と同様である．
+`}{`{=latex}
+Next, we train XGBoost models across all rolling windows. The model implementation follows the basic tutorial, executed within our workflow architecture.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+ハイパーパラメータ等の設定は次のとおり．
+`}{`{=latex}
+The hyperparameter configuration is specified as follows:
+`}\end{Translate}`{=latex}
+
+```{r model_xgb_params}
+params_xgb <- list(
+  objective = "reg:logistic",
+  eval_metric = "logloss", # Used in CV
+  # Hyper parameters. Determined by Bayesian optimization using the "tune" package.
+  gamma = 2.966439e-08, # loss_reduction
+  eta = 0.02, # learn_rate
+  max_depth = 10, # tree_depth
+  min_child_weight = 10, # min_n
+  subsample = 0.9976594, # sample_size
+  colsample_bynode = 6/31 # mtry / count of predictors
+)
+SETTING_DEBUG_XGB <- FALSE # If TRUE, display log during training
+SETTING_XGB_NROUND <- -1 # If -1, dynamically determined by CV during training
+```
+
+
+`\begin{Translate}{`{=latex}
+まず，モデル構築を行う関数を実装する．この中には，学習データですべての行で同じ数値となっている列の記録と，交差検証による `nrounds` の決定も含まれる．
+`}{`{=latex}
+We define the training function, which identifies constant columns and selects optimal boosting iterations (`nrounds`) via internal cross-validation for each rolling window.
+`}\end{Translate}`{=latex}
+
+
+```{r model_xgb_fun}
+fitfun_xgb <- function(train, fit_extra_arg){
+  df_train_x_tmp <- train %>% get_x %>% get_modelmatrix
+  
+  constant_cols <- which(apply(df_train_x_tmp, 2, function(col) all(col == col[1])))
+  dm_train <- xgb.DMatrix(data = df_train_x_tmp[, -constant_cols, drop = FALSE],
+                          label = train %>% get_y,
+                          weight = train %>% get_w)
+  
+  nrounds <- SETTING_XGB_NROUND
+  if (SETTING_XGB_NROUND < 0){
+    set.seed(2025)
+    cv_xgboost <- xgb.cv(data = dm_train,
+                         nrounds = 2000,
+                         nfold = 4,
+                         early_stopping_rounds = 10,
+                         params = params_xgb,
+                         verbose = SETTING_DEBUG_XGB)
+    nrounds <- cv_xgboost$early_stop$best_iteration
+    if(SETTING_DEBUG_XGB)
+      cat("best iteration: ", nrounds)
+  }
+  set.seed(2025)
+  model_xgboost <- xgb.train(data = dm_train,
+                           nrounds = nrounds,
+                           params = params_xgb,
+                           verbose = SETTING_DEBUG_XGB * 2)
+  
+  model <- list()
+  model$constant_cols <- constant_cols
+  model$model <- model_xgboost
+  return(model)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+次に，予測を行う部分を実装する．学習データで行で同じ数値となっている列への対応も含む．
+`}{`{=latex}
+We define the prediction function, ensuring constant features omitted during training are similarly dropped at scoring time.
+`}\end{Translate}`{=latex}
+
+
+```{r model_xgb_fun_predfun}
+predfun_xgb <- function(model, newdata){
+  df_test_x_tmp <- newdata %>% get_x %>% get_modelmatrix
+  df_test_x_tmp <- df_test_x_tmp[, -model$constant_cols, drop = FALSE]
+  predict(model$model, df_test_x_tmp)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+そして，`Workflow` オブジェクトの作成とモデル構築を行う．
+`}{`{=latex}
+We instantiate the base workflow and fit XGBoost across all rolling windows.
+`}\end{Translate}`{=latex}
+
+```{r model_xgb_fit_code, eval=FALSE}
+wf_base_xgb <- Workflow$new(fitfun = fitfun_xgb, predfun = predfun_xgb)
+wfs_xgb <- fit_allwindow(wf_base_xgb)
+```
+
+```{r model_xgb_fit, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+wf_base_xgb <- Workflow$new(fitfun = fitfun_xgb, predfun = predfun_xgb)
+wfs_xgb <- fit_allwindow(wf_base_xgb)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+最後に，評価指標を計算すると次のとおり．
+`}{`{=latex}
+Finally, we compute evaluation scores and EV reconciliations across all windows.
+`}\end{Translate}`{=latex}
+
+
+```{r model_xgb_scores_code, eval=FALSE}
+scores_xgb <- calc_scores_allwindow(wfs_xgb, types = types_all, verbose = T)
+```
+
+
+```{r model_xgb_scores, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+scores_xgb <- calc_scores_allwindow(wfs_xgb, types = types_all, verbose = T)
+}
+```
+
+```{r model_xgb_scores_display}
+scores_xgb$scores %>% select(-extras)
+```
+
+```{r model_xgb_evma_display}
+scores_xgb$evma$ev %>% fn_get_evma
+```
+
+## Baseline GLM
+
+
+`\begin{Translate}{`{=latex}
+修正 I-1 により `face_amount` を復元した「**Baseline GLM** 」，つまり SOA が構築したものと同等のモデルをこれまでと同様の手続きで構築する．前処理のための関数をごく一部修正するだけでよい．
+`}{`{=latex}
+We estimate the Baseline GLM—which restores `face_amount` per Item I-1—following the same stratified pipeline with updated feature specifications.
+`}\end{Translate}`{=latex}
+
+
+```{r prepfun_soa_xy}
+prepfun_soa_xy <- function(df_tmp){
+  df_tmp %>%
+    prepfun_soa_common %>%
+    select(duration, post_level_premium_structure,
+           issue_age, issue_age_sq, issue_age_log, risk_class_group,
+           premium_mode_group, premium_jump_ratio_group, face_amount, exposure, lapse)
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+`Workflow` オブジェクトの作成とモデル構築を行う．
+`}{`{=latex}
+We construct the workflow and fit the Baseline GLM across all windows.
+`}\end{Translate}`{=latex}
+
+```{r model_soa_fit_code, eval=FALSE}
+wf_base_soa <- Workflow$new(prepfun_soa_xy, fitfun_soa, predfun_soa)
+wfs_soa <- fit_allwindow(wf_base_soa)
+```
+
+
+```{r model_soa_fit, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+wf_base_soa <- Workflow$new(prepfun_soa_xy, fitfun_soa, predfun_soa)
+wfs_soa <- fit_allwindow(wf_base_soa)
+}
+```
+
+`\begin{Translate}{`{=latex}
+評価指標を計算すると次のとおり．
+`}{`{=latex}
+The evaluation scores and full AoM tables are summarized below.
+`}\end{Translate}`{=latex}
+
+
+```{r model_soa_scores_code, eval=FALSE}
+scores_soa <- calc_scores_allwindow(wfs_soa, types = types_all, verbose = T)
+```
+
+```{r model_soa_scores, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+scores_soa <- calc_scores_allwindow(wfs_soa, types = types_all, verbose = T)
+}
+```
+
+```{r model_soa_scores_display}
+scores_soa$scores %>% select(-extras)
+```
+
+```{r model_soa_evma_display}
+scores_soa$evma$ev %>% fn_get_evma
+```
+
+
+## Improved GLM
+
+`\begin{Translate}{`{=latex}
+元論文における10個の改良を全て施したモデル「**Improved GLM**」の構築方法は次のとおり．基本編で示したものとほぼ同様であるものの，全 Window の各層でも対応できるように一部の実装が異なる．
+`}{`{=latex}
+We construct the Improved GLM incorporating all ten refinement items. While conceptually identical to the basic tutorial, collapsing logic is generalized to accommodate all strata across windows.
+`}\end{Translate}`{=latex}
+
+
+```{r model_mod_prepfun}
+prepfun_mod_common <- function(df_tmp){
+  df_tmp %>% prep_toint_age %>% prep_toint_pjratio %>%
+    mutate(
+      premium_mode_oo = #I-4
+        if_else(
+          duration >= "10" & post_level_premium_structure == "Other" &
+            premium_mode == "Unknown/Other", 1, 0),
+      post_level_premium_structure = if_else( #I-4
+        premium_mode_oo == 1, "ART", post_level_premium_structure),
+      premium_mode = if_else( #I-4
+        premium_mode_oo == 1, "Monthly", premium_mode),
+      issue_age_sq = issue_age^2, issue_age_log = log(issue_age),
+      issue_age_70 = if_else(issue_age >= 70 & duration == "06-09", 1, 0), #I-5
+      risk_class_group = risk_class %>% #I-2
+        factor(levels = levels_risk_class,
+               labels = c("Super-Pref NS","NS","NS","NS","Undiff NS",
+                          "SM","SM","Undiff SM","Agg/Unknown")),
+      risk_class_int = factor( #I-6 
+        if_else(
+          (risk_class == "Undiff SM" | risk_class == "Non-Pref SM" |
+             risk_class == "Undiff NS" | risk_class == "Non-Pref NS") &
+            duration == "06-09" | 
+            (risk_class == "Undiff NS" | risk_class == "Non-Pref NS") &
+            duration == "10" | 
+            risk_class == "Undiff NS" , 
+          risk_class, "Super-Pref NS"),
+        levels = levels_risk_class),
+      premium_mode_group = premium_mode %>% #I-3
+        factor(levels = levels_premium_mode,
+               labels = c("Annual", "Semiannual", "Quarterly",
+                         "Monthly/Biweekly","Monthly/Biweekly", "Unknown/Other")),
+      premium_mode_group_q = if_else( #I-3
+        duration == "10" & premium_mode == "Quarterly", 1, 0),
+      premium_jump_ratio_group = cut(
+        if_else(premium_jump_ratio_unknown == 1, 0, premium_jump_ratio),
+        breaks = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 99), right = FALSE),
+      premium_jump_ratio_group2 = cut( #I-3
+        if_else(premium_jump_ratio_unknown == 1, 0, premium_jump_ratio),
+        breaks = c(0, 1, 2, 5, 99), right = FALSE),
+      premium_jump_ratio_rc_NPNS = if_else( #I-7 
+        risk_class == "Non-Pref NS", premium_jump_ratio, 0),
+      premium_jump_ratio_rc_PBNS = if_else( #I-7 
+        risk_class == "Pref Best NS" & (duration >= "10"), premium_jump_ratio, 0),
+      face_amount_D_prun = if_else( #I-9
+        duration == "06-09" & post_level_premium_structure == "ART" &
+          premium_jump_ratio_unknown == 1 & face_amount == "1M-", 
+        1, 0))
+}
+
+prepfun_mod_xy <- function(df_tmp){
+  df_tmp %>%
+    prepfun_mod_common %>%
+    select(duration, post_level_premium_structure,
+           issue_age, issue_age_sq, issue_age_log, risk_class_group,
+           issue_age_70, #I-5
+           risk_class_int, #I-6
+           premium_mode_group, premium_jump_ratio_group, 
+           premium_jump_ratio_group2, premium_mode_group_q, #I-3
+           premium_jump_ratio_rc_NPNS, premium_jump_ratio_rc_PBNS, #I-7
+           face_amount, #I-1
+           face_amount_D_prun, #I-9
+           gender, #I-10
+           exposure, lapse)
+}
+```
+
+`\begin{Translate}{`{=latex}
+特に，学習データに存在しないか，件数が少ないカテゴリへの対応が非常に複雑になる．
+`}{`{=latex}
+In particular, dynamic category collapsing rules must handle data sparsity across smaller sub-strata.
+`}\end{Translate}`{=latex}
+
+
+```{r model_mod_prepfun_emptylevel}
+prep_mod_threshold_risk_class_group <- 700 #I-2
+prep_mod_threshold_risk_class_group_SP <- 50 #I-2
+prep_mod_threshold_risk_class_group_UKN <- 100 #I-2
+prep_mod_threshold_risk_class_int <- 1000 #I-6 
+prep_mod_threshold_premium_jump_ratio_rc_NPNS <- 300 #I-7 
+prep_mod_threshold_premium_jump_ratio_rc_PBNS <- 100 #I-7 
+prep_mod_threshold_face_amount_D_prun <- 500 #I-9 
+
+prep_emptylevel_mod <- function(data){
+  model <- prep_emptylevel_soa(data)
+  
+  # Identify zero-count levels in risk_class_group and set replacement levels #I-2
+  df_alt <- tibble()
+  tb <- table(data$risk_class_group)
+  if (tb[["Super-Pref NS"]] <= prep_mod_threshold_risk_class_group_SP){
+    df_alt <- rbind(df_alt, tibble(org = "Super-Pref NS", alt = "NS"))
+  }
+  if (tb[["Agg/Unknown"]] <= prep_mod_threshold_risk_class_group_UKN){
+    df_alt <- rbind(df_alt, tibble(org = "Agg/Unknown", alt = "SM"))
+  }
+  if (tb[["SM"]] <= prep_mod_threshold_risk_class_group){
+    df_alt <- rbind(df_alt, tibble(org = "SM", alt = "Undiff SM")) %>%
+      mutate(alt = if_else(alt == "SM", "Undiff SM", alt))
+  }
+  if (tb[["NS"]] <= prep_mod_threshold_risk_class_group){
+    df_alt <- rbind(df_alt, tibble(org = "NS", alt = "Undiff NS")) %>%
+      mutate(alt = if_else(alt == "NS", "Undiff NS", alt))
+  }
+  if(tb[["Undiff NS"]] <= prep_mod_threshold_risk_class_group){
+    df_alt <- rbind(df_alt, tibble(org = "Undiff NS", alt = "NS")) %>%
+      mutate(alt = if_else(alt == "Undiff NS", "NS", alt))
+  }
+
+  model$df_alt_risk_class_group <- df_alt
+  
+  #I-3
+  df_ <- data %>% group_nest(premium_mode_group_q) %>%
+    mutate(df = map(data, function(data){
+      df_alt <- tibble()
+      tb <- table(data$premium_jump_ratio_group2)
+      for(rg in list(length(tb):1, 1:length(tb))){
+        alt <- NULL
+        for(i in rg){
+          if (tb[i] == 0){
+            if (!is.null(alt)){
+              df_alt <- rbind(df_alt, tibble(org = names(tb)[i], alt = alt))
+              tb[i] <- -1
+            }
+          }else{
+            alt <- names(tb)[i]
+          }
+        }
+      } 
+      df_alt
+    })) %>% select(-data) %>% unnest(df)
+  model$df_alt_premium_jump_ratio_group2_st <- df_
+  
+  # Identify zero-count levels in risk_class_int and set replacement levels #I-6 
+  df_alt <- tibble()
+  tb <- table(data$risk_class_int)
+  if (tb[["Undiff SM"]] <= prep_mod_threshold_risk_class_int){
+    df_alt <- rbind(df_alt, tibble(org = "Undiff SM", alt = "Super-Pref NS"))
+  }
+  if (tb[["Non-Pref SM"]] <= prep_mod_threshold_risk_class_int){
+    df_alt <- rbind(df_alt, tibble(org = "Non-Pref SM", alt = "Super-Pref NS"))
+  }
+  if (tb[["Non-Pref NS"]] <= prep_mod_threshold_risk_class_int){
+    df_alt <- rbind(df_alt, tibble(org = "Non-Pref NS", alt = "Super-Pref NS"))
+  }
+  if (tb[["Undiff NS"]] <= prep_mod_threshold_risk_class_int){
+    df_alt <- rbind(df_alt, tibble(org = "Undiff NS", alt = "Super-Pref NS"))
+  }
+  if (nrow(df_alt) > 0){
+    data_tmp <- data %>%
+      left_join(df_alt,
+                join_by(risk_class_int == org)) %>%
+      mutate(risk_class_int = coalesce(alt, risk_class_int))
+    model$risk_class_int_null <- length(unique(data_tmp$risk_class_int)) == 1
+  }
+  model$df_alt_risk_class_int <- df_alt
+  
+  model
+}
+```
+
+`\begin{Translate}{`{=latex}
+モデル構築部分の関数は次のとおり．`glm()`関数に引き渡す`formula`も，Windowや層によって変化させる必要がある．
+`}{`{=latex}
+Model formulas are dynamically adapted based on stratum-specific sample sizes to prevent rank-deficient specifications.
+`}\end{Translate}`{=latex}
+
+
+```{r model_mod_fitfun}
+fitfun_mod_st <- function(data, duration, post_level_premium_structure, ...){
+  model <- prep_emptylevel_mod(data)
+  data <- bake_emptylevel_soa(model, data)
+
+  tmp <- ""
+  if (!is.null(model$risk_class_int_null) && model$risk_class_int_null){ #I-6
+    tmp <- paste0(tmp, "")
+  }else{
+    tmp <- paste0(tmp, " + risk_class_int * issue_age")
+  }
+  if (sum(data$premium_jump_ratio_rc_NPNS != 0) >=
+      prep_mod_threshold_premium_jump_ratio_rc_NPNS){ #I-7
+    tmp <- paste0(tmp, "")
+  }else{
+    tmp <- paste0(tmp, " - premium_jump_ratio_rc_NPNS")
+  }
+  if (sum(data$premium_jump_ratio_rc_PBNS != 0) >=
+      prep_mod_threshold_premium_jump_ratio_rc_PBNS){ #I-7
+    tmp <- paste0(tmp, "")
+  }else{
+    tmp <- paste0(tmp, " - premium_jump_ratio_rc_PBNS")
+  }
+  if (sum(data$face_amount_D_prun) < prep_mod_threshold_face_amount_D_prun){ #I-9
+    data <- data %>% select(-face_amount_D_prun)
+  }
+  if ((duration == "06-09" || duration == "10") & #I-8
+      post_level_premium_structure == "ART"){
+    tmp <- paste0(tmp, " + issue_age : face_amount")
+  }
+  formula_string_additional <- tmp
+  
+  formula_string <- paste0(
+    "cbind(lapse, exposure - lapse) ~ (. ",
+    "- premium_jump_ratio_group2 - premium_mode_group_q ", #I-3
+    "+ premium_jump_ratio_group2 : premium_mode_group_q", #I-3
+    tmp,
+    "+ premium_jump_ratio_group * issue_age ) - 1")
+  
+  model$model <- glm(as.formula(formula_string),
+      family = binomial(), data = data)
+  model
+}
+fitfun_mod <- fitfun_soa_factory(fitfun_mod_st)
+```
+
+
+`\begin{Translate}{`{=latex}
+`Workflow` オブジェクトの作成とモデル構築はこれまでと同様．
+`}{`{=latex}
+The Improved GLM workflow is instantiated and trained across all windows.
+`}\end{Translate}`{=latex}
+
+```{r model_mod_fit_code, eval=FALSE}
+wf_base_mod <- Workflow$new(prepfun_mod_xy, fitfun_mod, predfun_soa)
+wfs_mod <- fit_allwindow(wf_base_mod)
+```
+
+```{r model_mod_fit, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+wf_base_mod <- Workflow$new(prepfun_mod_xy, fitfun_mod, predfun_soa)
+wfs_mod <- fit_allwindow(wf_base_mod)
+}
+```
+
+`\begin{Translate}{`{=latex}
+評価指標を計算すると次のとおり．
+`}{`{=latex}
+Evaluation scores and full AoM results are summarized below.
+`}\end{Translate}`{=latex}
+
+
+```{r model_mod_scores_code, eval=FALSE}
+scores_mod <- calc_scores_allwindow(wfs_mod, types = types_all, verbose = T)
+```
+
+```{r model_mod_scores, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+scores_mod <- calc_scores_allwindow(wfs_mod, types = types_all, verbose = T)
+}
+```
+
+
+```{r model_mod_scores_display}
+scores_mod$scores %>% select(-extras)
+```
+
+```{r model_mod_evma_display}
+scores_mod$evma$ev %>% fn_get_evma
+```
+
+
+<!--SAVE MODELS-->
+
+```{r save_models, echo=FALSE}
+if(SETTING_FIT_MODELS_INST){
+  save(wfs_soared, wfs_xgb, wfs_soa, wfs_mod, 
+       scores_soared, scores_xgb, scores_soa, scores_mod,
+       file = SETTING_FNAME_MODELS_INST_REPROD)
+}
+```
+
+
+
+# `\translateI{`{=latex}精度比較`}{`{=latex}Performance Comparison`}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+`calc_scores_allwindow()` 関数で得られたすべての評価結果に対して，他のモデルとの比較を表示するためのユーティリティ関数を用意する．引数 `calc.mean` を `TRUE` とすると，全 Window の結果をサマライズした RMSE または算術平均値を計算する．
+`}{`{=latex}
+We define a utility function to aggregate and compare evaluation metrics across all four models. Setting `calc.mean = TRUE` computes the multi-year root-mean-square for experience variances and arithmetic means for Log-loss and AUC.
+`}\end{Translate}`{=latex}
+
+
+
+```{r meas_compare_scores}
+compare_scores <- function(ls_scores, calc.mean = F, pivot = F, group = NULL){
+  cols <- Reduce(intersect, map(ls_scores, names))
+  df_results <- tibble(modelname = names(ls_scores), data = ls_scores) %>%
+    mutate(data = map(data, function(n){
+      select(n, all_of(cols))
+    })) %>%
+    unnest(data)
+  
+  if (pivot){
+    df_results <- df_results %>% group_by_vec(group = {{group}})
+    df_results <- df_results %>% pivot_wider(id_cols = c(year, group_vars(df_results)),
+                                             names_from = modelname,
+                                             values_from = setdiff(cols, c("year", group_vars(df_results))))
+  }
+  
+  if (calc.mean){
+    if ("extras" %in% names(df_results)){
+      df_results <- df_results %>% select(-extras)
+    }
+    df_results <- df_results %>% group_by_vec(group = {{group}}, modelname) %>%
+      summarise(across(c(-year),
+                       function(v)if(cur_column() %in% c("B-A", "C-B")){
+                         mean(v^2, na.rm = T)^0.5
+                       }else{mean(v)}), .groups = "drop")
+  }
+  
+  df_results
+}
+```
+
+`\begin{Translate}{`{=latex}
+これを用いて4モデルの比較を出力すると次のとおり．元論文の結果が再現されている．
+`}{`{=latex}
+Executing this comparison replicates the numerical tables published in the original paper.
+`}\end{Translate}`{=latex}
+
+
+```{r result_compare_scores}
+ls_scores <- list()
+ls_scores[["soa_reduced"]] <- scores_soared$scores %>% select(-extras)
+ls_scores[["soa_baseline"]] <- scores_soa$scores %>% select(-extras)
+ls_scores[["soa_improved"]] <- scores_mod$scores %>% select(-extras)
+ls_scores[["xgb"]] <- scores_xgb$scores %>% select(-extras)
+
+compare_scores(ls_scores, calc.mean = T)
+compare_scores(ls_scores, pivot = T)
+```
+
+
+
+
+# `\translateI{`{=latex}XGBoost のハイパーパラメータチューニング`}{`{=latex}XGBoost Hyperparameter Tuning`}`{=latex}
+
+
+
+`\begin{Translate}{`{=latex}
+元論文に記載のとおり，ハイパーパラメータは Bayesian optimization によりチューニングする． 具体的な実装には， `tidymodels` に含まれる `tune` パッケージを使用する．典型的なモデルに対するハイパーパラメータチューニングを比較的簡単なコードで行える．
+`}{`{=latex}
+As described in the paper, XGBoost hyperparameters were tuned via Bayesian optimization using the `tune` package within `tidymodels`.
+`}\end{Translate}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+最初に，ハイパーパラメータチューニングに使用するデータセットを指定する．ここでは，2005年から2007年の学習データを用いることとする．ここで決定したハイパーパラメータは，ローリングウィンドウ全体を通じて固定される．
+`}{`{=latex}
+We select the 2005–2007 training window as our representative tuning dataset. Hyperparameters selected here are held fixed across all rolling windows.
+`}\end{Translate}`{=latex}
+
+```{r model_xgb_tune_prep, eval=FALSE}
+library(tidymodels)
+y <- 2007 # Training data used for hyperparameter tuning
+df_train_tmp <- dfs_split %>% filter(year == y) %>% pull(df_train) %>% first
+df_test_tmp <- dfs_split %>% filter(year == y) %>% pull(df_test) %>% first
+
+# Prepare preprocessed training data for XGBoost
+df_train_x_xgb <- df_train_tmp %>% get_x %>% get_modelmatrix
+
+# Apply importance_weights or relevant weighting function to weights column beforehand
+df_train_xgb <- cbind(as_tibble(df_train_x_xgb),
+                      y = df_train_tmp %>% get_y,
+                      w = df_train_tmp %>% get_w %>% importance_weights)
+
+# Prepare test data for XGBoost
+df_test_x_xgb <- df_test_tmp %>% get_x %>% get_modelmatrix
+
+```
+
+
+
+`\begin{Translate}{`{=latex}
+チューニングの際の評価指標は Log-loss とするが，`yardstick` パッケージに備わるデフォルトの実装 `mn_log_loss` は，`boost_tree(mode = "regression")` の場合に用いることができないため，カスタムメトリックを作成して対応する．
+`}{`{=latex}
+Because `yardstick`'s default `mn_log_loss` metric does not directly support probability regression outputs from `boost_tree(mode = "regression")`, we define a custom Log-loss metric.
+`}\end{Translate}`{=latex}
+
+
+
+```{r model_xgb_tune_metric, eval=FALSE}
+#https://www.tidymodels.org/learn/develop/metrics/
+logloss_impl <- function(truth, estimate, case_weights = NULL) {
+  calc_logloss(estimate, truth, case_weights)
+}
+
+logloss_vec <- function(data, truth, estimate, na_rm = TRUE, case_weights = NULL, ...) {
+  check_numeric_metric(truth, estimate, case_weights)
+  if (na_rm) {
+    result <- yardstick_remove_missing(truth, estimate, case_weights)
+    truth <- result$truth
+    estimate <- result$estimate
+    case_weights <- result$case_weights
+  } else if (yardstick_any_missing(truth, estimate, case_weights)) {
+    return(NA_real_)
+  }
+  logloss_impl(truth, estimate, case_weights = case_weights)
+}
+
+library(rlang)
+logloss <- function(data, ...) {
+  UseMethod("logloss")
+}
+logloss <- new_numeric_metric(logloss, direction = "minimize")
+logloss.data.frame <- function(data, truth, estimate, na_rm = TRUE, case_weights = NULL, ...) {
+  numeric_metric_summarizer(
+    name = "logloss",
+    fn = logloss_vec,
+    data = data,
+    truth = !!enquo(truth),
+    estimate = !!enquo(estimate),
+    na_rm = na_rm,
+    case_weights = !!enquo(case_weights)
+  )
+}
+```
+
+
+`\begin{Translate}{`{=latex}
+そして，次のコードで実際に最適なハイパーパラメータの探索を行う．learning rate は0.02に固定し，ブースティングの反復回数は学習のたびに early stopping により決定する．そのほかのハイパーパラメータを， Bayesian optimization により決定する．
+`}{`{=latex}
+We execute Bayesian optimization across candidate hyperparameters, holding the learning rate fixed at 0.02 and determining tree iterations dynamically via early stopping.
+`}\end{Translate}`{=latex}
+
+
+
+```{r model_xgb_tune_do, eval=FALSE}
+# Model specification
+engine_tune_xgb <- boost_tree(mode = "regression") %>%
+  set_engine(
+    "xgboost",
+    objective = "reg:logistic",
+    eval_metric = "logloss",
+    # Proportion of validation data used for early stopping (remaining used for training)
+    validation = 0.2
+  ) %>%
+  set_args(
+    # Early stopping rounds (stop if no improvement for 10 consecutive iterations)
+    stop_iter = 10,
+    # nrounds for xgboost
+    trees = 2000,
+    loss_reduction = tune::tune(), # gamma for xgboost
+    learn_rate = 0.02, #tune::tune(), # eta for xgboost
+    tree_depth = tune::tune(), # max_depth for xgboost
+    min_n = tune::tune(), # min_child_weight for xgboost
+    sample_size = tune::tune(), # subsample for xgboost
+    mtry = tune::tune() # colsample_bynode for xgboost
+  )
+
+# Hyperparameter search space specification
+params_tune <- list(
+  #trees(), 
+  loss_reduction(), tree_depth(), min_n(), #learn_rate(), 
+  sample_size = sample_prop(),
+  mtry() %>% dials::finalize(df_train_x_xgb)
+  ) %>%
+  dials::parameters()
+
+# Tuning data setup (specify v for v-fold cross-validation)
+set.seed(2025)
+splitscv_df_train_xgb <- vfold_cv(df_train_xgb, v = 4)
+
+# Parallel processing setup: not supported on Windows with custom metrics
+#library(future)
+#plan(multisession)
+#cat("Number of parallel workers: ", nbrOfWorkers(), "\n")
+t1 <- proc.time() # Measure computation time
+
+# Execute tuning with the above specifications
+wf_tune_xgb <- workflow(y ~ .) %>%
+  add_model(engine_tune_xgb)
+
+set.seed(2025)
+tunedresult_xgb <- wf_tune_xgb %>%
+  tune_bayes(
+    resamples = splitscv_df_train_xgb,
+    param_info = params_tune,
+    initial = 10,       # Number of initial random candidate designs
+    iter = 20,          # Number of subsequent Bayesian optimization iterations
+    metrics = yardstick::metric_set(logloss),
+    control = control_bayes(verbose = TRUE, save_workflow = TRUE)
+  )
+
+t2 <- proc.time()
+t <- (t2-t1)[3]
+names(t) <- NULL
+mtry_cols <- ncol(df_train_x_xgb) # Denominator for colsample_bynode
+```
+
+```{r model_xgb_tune_do_save, eval=FALSE}
+save(tunedresult_xgb, t, mtry_cols, file = SETTING_FNAME_TUNEDRESULT_INST_REPROD)
+```
+
+
+
+
+`\begin{Translate}{`{=latex}
+これにより，元の論文の結果が再現される．
+`}{`{=latex}
+The optimal parameters identified through this tuning replicate the specifications used throughout the study.
+`}\end{Translate}`{=latex}
+
+```{r model_xgb_tune_do_result_code, eval=FALSE}
+cat("Tuning time:", t, "s\n")
+cat("mtry_cols:", mtry_cols, "\n") # Denominator for colsample_bynode
+print(autoplot(tunedresult_xgb))
+best_xgb <- tune::select_best(tunedresult_xgb, metric = "logloss")
+best_xgb
+```
+
+```{r model_xgb_tune_do_result, echo=FALSE}
+library(tune)
+if (file.exists(SETTING_FNAME_TUNEDRESULT_INST_REPROD)){
+  load(SETTING_FNAME_TUNEDRESULT_INST_REPROD)
+  
+  cat("Tuning time:", t, "s\n")
+  cat("mtry_cols:", mtry_cols, "\n") # Denominator for colsample_bynode
+  print(autoplot(tunedresult_xgb))
+  best_xgb <- tune::select_best(tunedresult_xgb, metric = "logloss")
+  best_xgb
+}
+```
+
+# `\translateI{`{=latex}基本編との整合性`}{`{=latex}Consistency with the Basic Tutorial`}`{=latex}
+
+
+`\begin{Translate}{`{=latex}
+注意深い読者は，基本編の GLM の精度評価指標が元論文や本ドキュメントの数値と一致しないことに気づくだろう．本節はこの不一致について原因を確認するものである．たとえば，Baseline GLM について不一致の状況を確認すると次のとおりである．
+`}{`{=latex}
+Attentive readers may notice that GLM evaluation metrics reported in the basic tutorial exhibit minor numerical differences from the figures in the paper and this replication script. This section examines the root cause of this discrepancy.
+`}\end{Translate}`{=latex}
+
+
+
+```{r setup_include_dependents_extract_basic, include=FALSE}
+prepfun_mod_xy_reprod <- prepfun_mod_xy
+it.extract(doc_basic, c("prepfun_soa_xy", "prepfun_soared_xy_test_2006", "prepfun_mod_xy"))
+prepfun_mod_xy_basic <- prepfun_mod_xy
+prepfun_mod_xy <- prepfun_mod_xy_reprod
+```
+
+```{r soa_basic_reprod}
+load(SETTING_FNAME_MODELS_INST_BASIC)
+
+year_midr <- 2006 # Validation Year - 1
+df_train_2006 <- df_all %>%
+  filter(lapse_study_year >= year_midr-2, lapse_study_year <= year_midr)
+df_test_2006 <- df_all %>%
+  filter(lapse_study_year == year_midr+1)
+
+df_train_2006_soa <- df_train_2006 %>% prepfun_soa_xy
+df_test_2006_soa <- df_test_2006 %>% prepfun_soa_xy
+
+pred_soa_basic <- model_soa_2006 %>%
+  predict(df_test_2006_soa %>% prepfun_soared_xy_test_2006, type = c("response"))
+
+logloss_basic <- calc_logloss(
+  pred_soa_basic,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = FALSE
+)#237853.5
+
+auc_basic <- calc_auc(
+  pred_soa_basic,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure)
+)#0.8073218
+
+logloss_reprod <- scores_soa$scores %>% filter(year == year_midr) %>% pull(logloss_total_test)
+auc_reprod <- scores_soa$scores %>% filter(year == year_midr) %>% pull(auc_test)
+```
+
+`\begin{Translate}{`{=latex}
+ROC-AUC は計算誤差程度の差しかないことから非常に近いモデルであることが示されている一方， Log-loss にわずかな差が見られることから，出力される確率の値に差が生じていることがわかる．
+`}{`{=latex}
+While ROC-AUC matches closely within machine precision, Log-loss exhibits a subtle difference, indicating minor variations in predicted probabilities.
+`}\end{Translate}`{=latex}
+
+
+```{r soa_basic_reprod_print}
+cat("Log-loss reprod:", logloss_reprod, ", basic:", logloss_basic, 
+    ", basic - reprod: ", logloss_basic - logloss_reprod, "\n")
+cat("ROC-AUC reprod:", auc_reprod, ", basic:", auc_basic, 
+    ", basic - reprod: ", auc_basic - auc_reprod)
+```
+
+`\begin{Translate}{`{=latex}
+その原因は，本ドキュメントでは層ごとに別々のモデルを構築している一方，基本編では1つのモデルとして構築しているためである．両者は本質的に同等なモデルであるが，学習データにおいて1件も解約が発生しないケースの予測において，わずかに出力される確率値が異なっている．実際，両者の予測値の対数をそれぞれ縦軸，横軸にとってプロットすると次の図のようになり，大多数の予測値は一致している一方で，ゼロに近い予測値を出力している箇所で差異が生まれていることが確認できる．
+`}{`{=latex}
+This divergence occurs because this replication document fits separate GLMs across individual strata, whereas the basic tutorial fits a single large stratified model. While mathematically equivalent across populated cells, they yield slightly different probabilities in zero-lapse cells. Plotting predicted log-probabilities confirms that predictions coincide across the vast majority of points, diverging only in extreme low-probability regions.
+`}\end{Translate}`{=latex}
+
+```{r plot_pred_soa_c}
+wf_soa_reprod <- wfs_soa %>% filter(year == year_midr) %>% pull(wf) %>% first
+pred_soa_reprod <- wf_soa_reprod$predict(df_test_2006)
+
+pred_soa_c <- cbind(df_test_2006, .log_reprod = log(pred_soa_reprod), 
+                    .log_basic = log(pred_soa_basic))
+pred_soa_c %>% ggplot(mapping = aes(x = .log_reprod, y = .log_basic)) + 
+  geom_point(alpha = 0.1)
+```
+
+`\begin{Translate}{`{=latex}
+例えば `.log_reprod` が -15 以上 -10 未満となるような検証データがどういうものかを特定してみる．次のように，`post_level_premium_structure == "ART" & duration == 12 & premium_jump_ratio > 12` の条件であることがわかる．この GLM では `premium_jump_ratio` はいくつかの区分に分けてダミー変数化されており，この群団の解約率が対応する回帰係数に直接的に反映される．
+`}{`{=latex}
+Inspecting records where log-probabilities fall between -15 and -10 reveals they correspond to `post_level_premium_structure == "ART"`, `duration == 12`, and `premium_jump_ratio > 12`, where binned dummy coefficients directly reflect zero-lapse observations.
+`}\end{Translate}`{=latex}
+
+```{r plot_pred_soa_c_ex1_data1}
+pred_soa_c %>% filter(.log_reprod >= -15, .log_reprod <= -10) %>% 
+  group_by(post_level_premium_structure, duration, premium_jump_ratio) %>% summarise(sum(exposure))
+```
+
+
+`\begin{Translate}{`{=latex}
+この条件は，学習データでは解約が1件も記録されていない．
+`}{`{=latex}
+Indeed, zero lapses were recorded in the training data for this specific segment.
+`}\end{Translate}`{=latex}
+
+
+```{r plot_pred_soa_c_ex1_data2}
+df_train_2006 %>% filter(post_level_premium_structure == "ART", duration == 12) %>%
+  group_by(premium_jump_ratio) %>% summarise(sum(exposure), sum(lapse))
+```
+
+
+`\begin{Translate}{`{=latex}
+さらに例えば `.log_reprod` が -20 未満となるような検証データがどういうものかを特定してみる．次のように，`post_level_premium_structure == "Other" & duration == "06-09" & premium_mode == "Unknown/Other"` の条件であることがわかる．この群団の解約率が対応する回帰係数に直接的に反映される．
+`}{`{=latex}
+Similarly, inspect records where log-probabilities fall below -20 (`post_level_premium_structure == "Other"`, `duration == "06-09"`, and `premium_mode == "Unknown/Other"`):
+`}\end{Translate}`{=latex}
+
+```{r plot_pred_soa_c_ex2_data1}
+pred_soa_c %>% filter(.log_reprod <= -20) %>% 
+  group_by(post_level_premium_structure, duration, premium_mode) %>% summarise(sum(exposure))
+```
+
+
+
+`\begin{Translate}{`{=latex}
+この条件は，学習データでは解約が1件も記録されていない．
+`}{`{=latex}
+This segment likewise contains zero observed lapses in the training data.
+`}\end{Translate}`{=latex}
+
+
+```{r plot_pred_soa_c_ex2_data2}
+df_train_2006 %>% filter(post_level_premium_structure == "Other", duration == "06-09") %>%
+  group_by(premium_mode) %>% summarise(sum(exposure), sum(lapse))
+```
+
+
+
+`\begin{Translate}{`{=latex}
+最後に，同じような関係が Reduced Baseline GLM と Improved GLM でも成立するかを確認する．Reduced Baseline GLM では次のとおりで，同じ関係が成立している．
+`}{`{=latex}
+Confirming whether the same pattern holds for the Reduced Baseline GLM yields an identical relationship:
+`}\end{Translate}`{=latex}
+
+
+```{r plot_pred_soared_c}
+df_train_2006_soared <- df_train_2006 %>% prepfun_soared_xy
+df_test_2006_soared <- df_test_2006 %>% prepfun_soared_xy
+
+pred_soared_basic <- model_soared_2006 %>%
+  predict(df_test_2006_soared %>% prepfun_soared_xy_test_2006, type = c("response"))
+
+logloss_basic <- calc_logloss(
+  pred_soared_basic,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = FALSE
+)
+
+auc_basic <- calc_auc(
+  pred_soared_basic,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure)
+)
+
+logloss_reprod <- scores_soared$scores %>% filter(year == year_midr) %>% pull(logloss_total_test)
+auc_reprod <- scores_soared$scores %>% filter(year == year_midr) %>% pull(auc_test)
+cat("Log-loss reprod:", logloss_reprod, ", basic:", logloss_basic, 
+    ", basic - reprod: ", logloss_basic - logloss_reprod, "\n")
+cat("ROC-AUC reprod:", auc_reprod, ", basic:", auc_basic, ", 
+    basic - reprod: ", auc_basic - auc_reprod)
+
+wf_soared_reprod <- wfs_soared %>% filter(year == year_midr) %>% pull(wf) %>% first
+pred_soared_reprod <- wf_soared_reprod$predict(df_test_2006)
+
+pred_soared_c <- cbind(df_test_2006, .log_reprod = log(pred_soared_reprod), 
+                       .log_basic = log(pred_soared_basic))
+pred_soared_c %>% ggplot(mapping = aes(x = .log_reprod, y = .log_basic)) + 
+  geom_point(alpha = 0.1)
+```
+
+
+`\begin{Translate}{`{=latex}
+Improved GLM では次のとおりで，ここでも同じ関係が成立している．
+`}{`{=latex}
+For the Improved GLM, the identical consistency pattern is confirmed:
+`}\end{Translate}`{=latex}
+
+
+
+```{r plot_pred_mod_c}
+df_train_2006_mod <- df_train_2006 %>% prepfun_mod_xy_basic
+df_test_2006_mod <- df_test_2006 %>% prepfun_mod_xy_basic
+
+pred_mod_basic <- model_mod_2006 %>%
+  predict(df_test_2006_mod %>% prepfun_soared_xy_test_2006, type = c("response"))
+
+logloss_basic <- calc_logloss(
+  pred_mod_basic,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure),
+  mean = FALSE
+)
+
+auc_basic <- calc_auc(
+  pred_mod_basic,
+  df_test_2006 %>% pull(lapse_rate),
+  df_test_2006 %>% pull(exposure)
+)
+
+logloss_reprod <- scores_mod$scores %>% filter(year == year_midr) %>% pull(logloss_total_test)
+auc_reprod <- scores_mod$scores %>% filter(year == year_midr) %>% pull(auc_test)
+cat("Log-loss reprod:", logloss_reprod, ", basic:", logloss_basic, 
+    ", basic - reprod: ", logloss_basic - logloss_reprod, "\n")
+cat("ROC-AUC reprod:", auc_reprod, ", basic:", auc_basic, 
+    ", basic - reprod: ", auc_basic - auc_reprod)
+
+wf_mod_reprod <- wfs_mod %>% filter(year == year_midr) %>% pull(wf) %>% first
+pred_mod_reprod <- wf_mod_reprod$predict(df_test_2006)
+
+pred_mod_c <- cbind(df_test_2006, .log_reprod = log(pred_mod_reprod),
+                    .log_basic = log(pred_mod_basic))
+pred_mod_c %>% ggplot(mapping = aes(x = .log_reprod, y = .log_basic)) + 
+  geom_point(alpha = 0.1)
+```
+
+# `\translateI{`{=latex}検証環境`}{`{=latex}Computational Environment`}`{=latex}
+
+`\begin{Translate}{`{=latex}
+R やパッケージのバージョンによって計算結果が異なる可能性がある．ここでは，本ドキュメントを作成するのに使用したパッケージ等のバージョンを記す．
+`}{`{=latex}
+Because slight numerical variations may arise across software versions, the R session and package version details utilized for generating this document are recorded below.
+`}\end{Translate}`{=latex}
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+
+
+# Acknowledgments {.unnumbered}
+
+`\begin{Translate}{`{=latex}
+本研究の実施にあたり，公表データ（SOA 10-Year Level Premium Term Lapse Study）を提供いただいた Society of Actuaries (SOA) に深謝いたします．なお，本論文の作成プロセスにおける英文表現の推敲およびコード構築の補助にあたっては，適切な人間による確認と責任のもとで生成 AI ツール（Gemini / ChatGPT 等）を活用いたしました．
+`}{`{=latex}
+The authors gratefully acknowledge the Society of Actuaries (SOA) for providing the public dataset (SOA 10-Year Level Premium Term Lapse Study) utilized in this study. In addition, generative AI tools (such as Gemini and ChatGPT) were used to assist with English language editing and R code refinement, with all final content thoroughly reviewed and verified by the authors.
+`}\end{Translate}`{=latex}
+<!--
+また，研究の方向性や実務的分析に関して貴重なコメントと助言をいただいた査読者および同僚の皆様に感謝申し上げます．
+We also express our sincere appreciation to the reviewers and colleagues whose insightful comments and suggestions greatly improved this paper. 
+-->
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+
